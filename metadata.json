@@ -1,0 +1,6 @@
+{
+  "name": "Cosmic Striker",
+  "description": "Retro futuristic HTML5 Space Shooter game!",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
