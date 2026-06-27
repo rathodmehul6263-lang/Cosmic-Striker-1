@@ -288,6 +288,10 @@
                     <svg class="life-heart lost" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                     <svg class="life-heart lost" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                 </div>
+                <!-- Player Health Bar -->
+                <div id="player-health-bar-container" style="width: 80px; height: 6px; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 3px; overflow: hidden; margin-top: 4px; box-shadow: 0 0 6px rgba(0, 240, 255, 0.25);">
+                    <div id="player-health-fill" style="width: 60%; height: 100%; background: linear-gradient(90deg, #00f0ff, #00ff66); transition: width 0.25s ease-out-in;"></div>
+                </div>
             </div>
             <div class="hud-item" style="align-items: center;">
                 <span class="hud-label">Sector</span>
@@ -1070,6 +1074,17 @@
             ctx.closePath();
             ctx.fill();
 
+            // Glowing energy shield aura if active
+            if (player.hasShield) {
+                ctx.strokeStyle = '#00f0ff';
+                ctx.fillStyle = 'rgba(0, 240, 255, 0.15)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.width * 0.9, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            }
+
             ctx.restore();
         }
 
@@ -1357,14 +1372,20 @@
                 this.color = '';
                 this.scoreVal = 0;
                 this.hp = 0;
+                this.vx = 0;
+                this.hunterSpeed = 0;
+                this.isCharging = false;
             }
 
             init() {
                 this.active = true;
-                this.width = Math.random() * 15 + 25; // 25px - 40px
+                this.width = Math.random() * 12 + 25; // 25px - 37px
                 this.height = this.width;
-                this.x = Math.random() * (canvas.width - this.width) + this.width / 2;
+                this.x = Math.random() * (canvas.width - 40) + 20;
                 this.y = -this.height;
+                this.vx = 0;
+                this.hunterSpeed = 0;
+                this.isCharging = false;
                 
                 // Speed adjusts by level factor
                 const levelConfig = LEVELS[currentLevel] || LEVELS[1];
@@ -1372,30 +1393,48 @@
                 this.speed = (Math.random() * 1.5 + 1.2) * speedMult;
                 this.angle = 0;
                 this.sinSpeed = Math.random() * 0.03 + 0.012;
-                this.sinAmp = Math.random() * 1.8;
+                this.sinAmp = (Math.random() * 1.5 + 1.0) * 1.5;
                 
                 const typeRand = Math.random();
-                if (typeRand < 0.25) {
+                if (typeRand < 0.16) {
                     this.type = 'striker'; // Fast direct
                     this.color = '#ff003c';
-                    this.speed += 1.0;
+                    this.speed += 1.2;
                     this.scoreVal = 10;
                     this.hp = 1;
-                } else if (typeRand < 0.55) {
+                } else if (typeRand < 0.32) {
                     this.type = 'weaver'; // Sinusoidal weave
                     this.color = '#ff9f00';
                     this.scoreVal = 15;
                     this.hp = 1;
-                } else if (typeRand < 0.85) {
+                } else if (typeRand < 0.48) {
+                    this.type = 'zigzagger'; // Sharp diagonal zig-zag bouncing off walls
+                    this.color = '#00ff66';
+                    this.vx = (Math.random() < 0.5 ? -1.6 : 1.6) * speedMult;
+                    this.scoreVal = 20;
+                    this.hp = 2;
+                } else if (typeRand < 0.64) {
+                    this.type = 'hunter'; // Actively steers horizontally towards player
+                    this.color = '#00f0ff';
+                    this.hunterSpeed = (Math.random() * 0.6 + 0.6) * speedMult;
+                    this.scoreVal = 25;
+                    this.hp = 2;
+                } else if (typeRand < 0.80) {
+                    this.type = 'kamikaze'; // Slow descent, then charges rapid downward-diagonal path
+                    this.color = '#ff33ff';
+                    this.speed = 1.0 * speedMult;
+                    this.scoreVal = 30;
+                    this.hp = 1;
+                } else if (typeRand < 0.92) {
                     this.type = 'elite'; // Bigger heavy tank
                     this.color = '#bf00ff';
                     this.width = 46;
                     this.height = 46;
                     this.hp = 3;
-                    this.scoreVal = 30;
+                    this.scoreVal = 40;
                 } else {
                     this.type = 'meteor'; // Slow heavy obstacle
-                    this.color = '#ffcc00';
+                    this.color = '#7f8c8d';
                     this.speed -= 0.6;
                     this.scoreVal = 10;
                     this.hp = 2;
@@ -1409,7 +1448,37 @@
                 if (this.type === 'weaver') {
                     this.angle += this.sinSpeed * modifier;
                     this.x += Math.sin(this.angle) * this.sinAmp * modifier;
+                } else if (this.type === 'zigzagger') {
+                    this.x += this.vx * modifier;
+                    const r = this.width / 2;
+                    if (this.x < r) {
+                        this.x = r;
+                        this.vx = -this.vx;
+                    } else if (this.x > canvas.width - r) {
+                        this.x = canvas.width - r;
+                        this.vx = -this.vx;
+                    }
+                } else if (this.type === 'hunter') {
+                    const diffX = player.x - this.x;
+                    if (Math.abs(diffX) > 5) {
+                        this.x += Math.sign(diffX) * this.hunterSpeed * modifier;
+                    }
+                } else if (this.type === 'kamikaze') {
+                    if (!this.isCharging && this.y > 150) {
+                        this.isCharging = true;
+                        const diffX = player.x - this.x;
+                        this.vx = (diffX / 12) * modifier;
+                        this.speed *= 2.5;
+                    }
+                    if (this.isCharging) {
+                        this.x += this.vx * modifier;
+                    }
                 }
+
+                // Keep inside screen bounds horizontally
+                const r = this.width / 2;
+                if (this.x < r) this.x = r;
+                if (this.x > canvas.width - r) this.x = canvas.width - r;
 
                 return this.y > canvas.height + this.height;
             }
@@ -1420,28 +1489,39 @@
                 ctx.lineWidth = 2.5;
 
                 ctx.beginPath();
+                const r = this.width / 2;
                 if (this.type === 'striker') {
                     const cx = this.x;
                     const cy = this.y;
-                    const r = this.width / 2;
                     for (let i = 0; i < 5; i++) {
                         ctx.lineTo(cx + r * Math.cos((i * 4 * Math.PI) / 5 - Math.PI/2), cy + r * Math.sin((i * 4 * Math.PI) / 5 - Math.PI/2));
                     }
                 } else if (this.type === 'weaver') {
-                    const r = this.width / 2;
                     ctx.moveTo(this.x, this.y - r);
                     ctx.lineTo(this.x + r, this.y);
                     ctx.lineTo(this.x, this.y + r);
                     ctx.lineTo(this.x - r, this.y);
+                } else if (this.type === 'zigzagger') {
+                    ctx.moveTo(this.x, this.y - r);
+                    ctx.lineTo(this.x + r, this.y + r);
+                    ctx.lineTo(this.x, this.y + r/2);
+                    ctx.lineTo(this.x - r, this.y + r);
+                } else if (this.type === 'hunter') {
+                    ctx.moveTo(this.x, this.y - r);
+                    ctx.lineTo(this.x + r, this.y);
+                    ctx.lineTo(this.x, this.y + r);
+                    ctx.lineTo(this.x - r, this.y);
+                } else if (this.type === 'kamikaze') {
+                    ctx.moveTo(this.x, this.y - r);
+                    ctx.lineTo(this.x + r, this.y + r);
+                    ctx.lineTo(this.x - r, this.y + r);
                 } else if (this.type === 'elite') {
-                    const r = this.width / 2;
                     ctx.moveTo(this.x, this.y - r);
                     ctx.lineTo(this.x + r, this.y - r / 3);
                     ctx.lineTo(this.x + r * 0.7, this.y + r);
                     ctx.lineTo(this.x - r * 0.7, this.y + r);
                     ctx.lineTo(this.x - r, this.y - r / 3);
                 } else {
-                    const r = this.width / 2;
                     ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
                 }
                 ctx.closePath();
@@ -1789,6 +1869,10 @@
                     heart.classList.remove('lost');
                 }
             });
+            const pFill = document.getElementById('player-health-fill');
+            if (pFill) {
+                pFill.style.width = ((lives / 5) * 100) + "%";
+            }
         }
 
         function clearLevel() {
