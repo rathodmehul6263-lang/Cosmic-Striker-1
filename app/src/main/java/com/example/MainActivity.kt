@@ -34,6 +34,21 @@ class MainActivity : ComponentActivity() {
                 or View.SYSTEM_UI_FLAG_FULLSCREEN
         )
 
+        // Pre-create WebView cache directories to prevent inaccessible/missing directory errors on start up
+        try {
+            val cacheDir = cacheDir
+            val jsCache = java.io.File(cacheDir, "WebView/Default/HTTP Cache/Code Cache/js")
+            if (!jsCache.exists()) {
+                jsCache.mkdirs()
+            }
+            val wasmCache = java.io.File(cacheDir, "WebView/Default/HTTP Cache/Code Cache/wasm")
+            if (!wasmCache.exists()) {
+                wasmCache.mkdirs()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         setContent {
             MyApplicationTheme {
                 SpaceShooterGameScreen()
@@ -63,6 +78,7 @@ fun SpaceShooterGameScreen() {
                     databaseEnabled = true
                     allowFileAccess = true
                     allowContentAccess = true
+                    cacheMode = WebSettings.LOAD_NO_CACHE
                     
                     // Visual optimization settings for canvas performance and proper scaling
                     useWideViewPort = true
