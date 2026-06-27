@@ -513,15 +513,6 @@
             return parseInt(localStorage.getItem('space_shooter_highscore') || '0', 10);
         }
 
-        function updateHighScoreDisplays() {
-            const high = getHighScore();
-            const formatted = String(high).padStart(5, '0');
-            bestScoreDisplay.textContent = formatted;
-            gameOverBestDisplay.textContent = formatted;
-            highScoreDisplay.textContent = formatted;
-        }
-        updateHighScoreDisplays();
-
         // Save high score if necessary
         function checkAndSaveScore() {
             const currentHigh = getHighScore();
