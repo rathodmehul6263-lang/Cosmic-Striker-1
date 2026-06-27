@@ -18,6 +18,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -53,7 +54,7 @@ enum class GameScreen {
 
 class MainActivity : ComponentActivity() {
     private lateinit var leaderboardManager: LeaderboardManager
-    private var webView: WebView? = null
+    var webView: WebView? = null
 
     // Compose state variables
     private var currentScreen by mutableStateOf(GameScreen.MENU)
@@ -61,6 +62,25 @@ class MainActivity : ComponentActivity() {
     private var isNewHighScore by mutableStateOf(false)
     private var leaderboardList by mutableStateOf(listOf<LeaderboardEntry>())
     private var isScoreSavedForCurrentGame = false
+
+    // Level, Coins, Selected Stage states
+    private var highestLevelState by mutableStateOf(1)
+    private var totalCoinsState by mutableStateOf(0)
+    private var selectedLevel by mutableStateOf(1)
+
+    fun getHighestLevel(): Int = highestLevelState
+    fun setHighestLevel(level: Int) {
+        highestLevelState = level
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putInt("highest_unlocked_level", level).apply()
+    }
+
+    fun getTotalCoins(): Int = totalCoinsState
+    fun setTotalCoins(coins: Int) {
+        totalCoinsState = coins
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putInt("total_coins", coins).apply()
+    }
 
     // Sound, Music, Vibration, Pause states
     private var isPaused by mutableStateOf(false)
@@ -133,6 +153,9 @@ class MainActivity : ComponentActivity() {
         soundEffectsEnabledState = prefs.getBoolean("settings_sound_effects", true)
         musicEnabledState = prefs.getBoolean("settings_music", true)
         vibrationEnabledState = prefs.getBoolean("settings_vibration", true)
+        highestLevelState = prefs.getInt("highest_unlocked_level", 1)
+        totalCoinsState = prefs.getInt("total_coins", 0)
+        selectedLevel = highestLevelState
 
         // Hide Android System Bars (Status and Navigation) to provide true immersive arcade view
         window.decorView.systemUiVisibility = (
@@ -197,10 +220,17 @@ class MainActivity : ComponentActivity() {
                             GameScreen.MENU -> {
                                 MainMenuOverlay(
                                     topScores = leaderboardList,
+                                    highestUnlockedLevel = highestLevelState,
+                                    totalCoins = totalCoinsState,
+                                    selectedLevel = selectedLevel,
+                                    onLevelSelected = { lvl ->
+                                        playClickSound()
+                                        selectedLevel = lvl
+                                    },
                                     onLaunchMission = {
                                         isPaused = false
                                         currentScreen = GameScreen.PLAYING
-                                        webView?.evaluateJavascript("window.startGame()", null)
+                                        webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
                                     },
                                     onSettingsClick = {
                                         playClickSound()
@@ -216,7 +246,7 @@ class MainActivity : ComponentActivity() {
                                     onDeployAgain = {
                                         isPaused = false
                                         currentScreen = GameScreen.PLAYING
-                                        webView?.evaluateJavascript("window.startGame()", null)
+                                        webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
                                     },
                                     onReturnToHangar = {
                                         isPaused = false
@@ -425,11 +455,46 @@ class GameInterface(
     fun vibrate(durationMs: Int) {
         activity.vibratePhone(durationMs.toLong())
     }
+
+    @android.webkit.JavascriptInterface
+    fun getHighestLevel(): Int {
+        return activity.getHighestLevel()
+    }
+
+    @android.webkit.JavascriptInterface
+    fun saveHighestLevel(level: Int) {
+        activity.runOnUiThread {
+            activity.setHighestLevel(level)
+        }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun getTotalCoins(): Int {
+        return activity.getTotalCoins()
+    }
+
+    @android.webkit.JavascriptInterface
+    fun saveTotalCoins(coins: Int) {
+        activity.runOnUiThread {
+            activity.setTotalCoins(coins)
+        }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun returnToMenu() {
+        activity.runOnUiThread {
+            activity.webView?.evaluateJavascript("window.showStartScreen()", null)
+        }
+    }
 }
 
 @Composable
 fun MainMenuOverlay(
     topScores: List<LeaderboardEntry>,
+    highestUnlockedLevel: Int,
+    totalCoins: Int,
+    selectedLevel: Int,
+    onLevelSelected: (Int) -> Unit,
     onLaunchMission: () -> Unit,
     onSettingsClick: () -> Unit = {}
 ) {
@@ -441,20 +506,20 @@ fun MainMenuOverlay(
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .fillMaxHeight(0.85f)
+                .fillMaxWidth(0.95f)
+                .fillMaxHeight(0.92f)
                 .background(Color(0xAA0A0F2D), shape = RoundedCornerShape(20.dp))
                 .border(
                     BorderStroke(2.dp, Brush.linearGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080)))),
                     shape = RoundedCornerShape(20.dp)
                 )
-                .padding(24.dp),
+                .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Title
             Text(
                 text = "COSMIC STRIKER",
-                fontSize = 32.sp,
+                fontSize = 28.sp,
                 fontWeight = FontWeight.ExtraBold,
                 fontFamily = FontFamily.SansSerif,
                 color = Color.White,
@@ -464,23 +529,105 @@ fun MainMenuOverlay(
             
             Text(
                 text = "GALACTIC DEFENSE FORCE",
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
                 color = Color(0xFF8FA0DD),
                 letterSpacing = 2.sp,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 24.dp)
+                modifier = Modifier.padding(bottom = 8.dp)
             )
+
+            // Coins Display
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .background(Color(0xFFFFD700).copy(alpha = 0.12f), shape = RoundedCornerShape(12.dp))
+                    .border(BorderStroke(1.dp, Color(0xFFFFD700)), shape = RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = "🪙 ",
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = "TOTAL COINS: ",
+                    color = Color(0xFFFFD700),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+                Text(
+                    text = String.format("%04d", totalCoins),
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Level Selector Box
+            Text(
+                text = "SELECT MISSION SECTOR",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFF0080),
+                letterSpacing = 1.sp,
+                modifier = Modifier.padding(bottom = 6.dp)
+            )
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0x33000000), shape = RoundedCornerShape(12.dp))
+                    .border(BorderStroke(1.dp, Color(0x22FFFFFF)), shape = RoundedCornerShape(12.dp))
+                    .padding(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Row 1: Levels 1-5
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    for (lvl in 1..5) {
+                        LevelSelectorItem(
+                            level = lvl,
+                            isUnlocked = lvl <= highestUnlockedLevel,
+                            isSelected = lvl == selectedLevel,
+                            onClick = { onLevelSelected(lvl) }
+                        )
+                    }
+                }
+
+                // Row 2: Levels 6-10
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    for (lvl in 6..10) {
+                        LevelSelectorItem(
+                            level = lvl,
+                            isUnlocked = lvl <= highestUnlockedLevel,
+                            isSelected = lvl == selectedLevel,
+                            onClick = { onLevelSelected(lvl) }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Leaderboard Box
             Text(
                 text = "TOP PILOTS LEADERBOARD",
-                fontSize = 14.sp,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = Color(0xFF00F0FF),
                 letterSpacing = 1.sp,
-                modifier = Modifier.padding(bottom = 12.dp)
+                modifier = Modifier.padding(bottom = 6.dp)
             )
 
             Box(
@@ -489,7 +636,7 @@ fun MainMenuOverlay(
                     .fillMaxWidth()
                     .background(Color(0x55000000), shape = RoundedCornerShape(10.dp))
                     .border(BorderStroke(1.dp, Color(0x33FFFFFF)), shape = RoundedCornerShape(10.dp))
-                    .padding(8.dp)
+                    .padding(6.dp)
             ) {
                 if (topScores.isEmpty()) {
                     Box(
@@ -499,16 +646,16 @@ fun MainMenuOverlay(
                         Text(
                             text = "NO FLIGHT LOGS FOUND\nBE THE FIRST HERO!",
                             color = Color(0xFF8FA0DD),
-                            fontSize = 13.sp,
+                            fontSize = 11.sp,
                             textAlign = TextAlign.Center,
                             fontFamily = FontFamily.Monospace,
-                            lineHeight = 20.sp
+                            lineHeight = 16.sp
                         )
                     }
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         itemsIndexed(topScores) { index, entry ->
                             LeaderboardRow(rank = index + 1, entry = entry)
@@ -517,7 +664,7 @@ fun MainMenuOverlay(
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Play Button
             Button(
@@ -529,7 +676,7 @@ fun MainMenuOverlay(
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(54.dp)
+                    .height(48.dp)
                     .border(
                         BorderStroke(2.dp, Color(0xFF00F0FF)),
                         shape = RoundedCornerShape(12.dp)
@@ -551,9 +698,9 @@ fun MainMenuOverlay(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "LAUNCH MISSION",
+                        text = "LAUNCH SECTOR $selectedLevel",
                         color = Color.White,
-                        fontSize = 16.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 2.sp
                     )
@@ -571,7 +718,7 @@ fun MainMenuOverlay(
             IconButton(
                 onClick = onSettingsClick,
                 modifier = Modifier
-                    .size(48.dp)
+                    .size(44.dp)
                     .background(Color(0xAA0A0F2D), shape = RoundedCornerShape(12.dp))
                     .border(BorderStroke(1.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(12.dp))
             ) {
@@ -584,6 +731,51 @@ fun MainMenuOverlay(
         }
     }
 }
+
+@Composable
+fun LevelSelectorItem(
+    level: Int,
+    isUnlocked: Boolean,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val borderColor = if (isSelected) Color(0xFF00F0FF) else if (isUnlocked) Color(0x4400F0FF) else Color(0x11FFFFFF)
+    val backgroundBrush = if (isSelected) {
+        Brush.linearGradient(listOf(Color(0xFF005577), Color(0xFF0088AA)))
+    } else if (isUnlocked) {
+        Brush.linearGradient(listOf(Color(0x220A0F2D), Color(0x440A0F2D)))
+    } else {
+        Brush.linearGradient(listOf(Color(0x11000000), Color(0x11000000)))
+    }
+    val textColor = if (isSelected) Color.White else if (isUnlocked) Color(0xFF8FA0DD) else Color(0x338FA0DD)
+
+    Box(
+        modifier = Modifier
+            .size(width = 46.dp, height = 40.dp)
+            .border(BorderStroke(if (isSelected) 2.dp else 1.dp, borderColor), shape = RoundedCornerShape(8.dp))
+            .background(backgroundBrush, shape = RoundedCornerShape(8.dp))
+            .then(if (isUnlocked) Modifier.clickable { onClick() } else Modifier),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isUnlocked) {
+            Text(
+                text = level.toString(),
+                color = textColor,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+        } else {
+            Text(
+                text = "🔒",
+                fontSize = 11.sp,
+                color = Color(0x44FFFFFF)
+            )
+        }
+    }
+}
+
+
 
 @Composable
 fun LeaderboardRow(rank: Int, entry: LeaderboardEntry) {
