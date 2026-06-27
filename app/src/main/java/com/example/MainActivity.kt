@@ -54,6 +54,7 @@ class MainActivity : ComponentActivity() {
     private var finalScore by mutableStateOf(0)
     private var isNewHighScore by mutableStateOf(false)
     private var leaderboardList by mutableStateOf(listOf<LeaderboardEntry>())
+    private var isScoreSavedForCurrentGame = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -181,21 +182,28 @@ class MainActivity : ComponentActivity() {
                         activity = this@MainActivity,
                         onGameOver = { score ->
                             finalScore = score
-                            isNewHighScore = leaderboardManager.addScore(score)
-                            leaderboardList = leaderboardManager.getTopScores()
+                            if (!isScoreSavedForCurrentGame) {
+                                isNewHighScore = leaderboardManager.addScore(score)
+                                leaderboardList = leaderboardManager.getTopScores()
+                                isScoreSavedForCurrentGame = true
+                            }
                             currentScreen = GameScreen.GAMEOVER
                         },
                         onGameStarted = {
+                            isScoreSavedForCurrentGame = false
                             currentScreen = GameScreen.PLAYING
                         },
                         getHighScore = {
                             leaderboardManager.getHighScore()
                         },
                         saveScore = { score ->
-                            val isNewHigh = leaderboardManager.addScore(score)
-                            leaderboardList = leaderboardManager.getTopScores()
-                            if (isNewHigh) {
-                                isNewHighScore = true
+                            if (!isScoreSavedForCurrentGame) {
+                                val isNewHigh = leaderboardManager.addScore(score)
+                                leaderboardList = leaderboardManager.getTopScores()
+                                if (isNewHigh) {
+                                    isNewHighScore = true
+                                }
+                                isScoreSavedForCurrentGame = true
                             }
                         }
                     ), "AndroidGame")

@@ -24,22 +24,33 @@ class LeaderboardManager(context: Context) {
                     } else null
                 } else null
             }
+            .distinctBy { Pair(it.score, it.timestamp) }
             .sortedByDescending { it.score }
     }
 
-    fun addScore(score: Int): Boolean {
+    fun addScore(score: Int, timestamp: Long = System.currentTimeMillis()): Boolean {
+        if (score <= 0) return false
         val previousHigh = getHighScore()
         val currentScores = getTopScores().toMutableList()
-        currentScores.add(LeaderboardEntry(score, System.currentTimeMillis()))
         
+        // Prevent duplicate entries with the exact same score and timestamp
+        val isDuplicate = currentScores.any { it.score == score && it.timestamp == timestamp }
+        if (isDuplicate) {
+            return false
+        }
+        
+        currentScores.add(LeaderboardEntry(score, timestamp))
+        
+        // Keep only the Top 10 highest unique game entries
         val top10 = currentScores
+            .distinctBy { Pair(it.score, it.timestamp) }
             .sortedByDescending { it.score }
             .take(10)
         
         val serialized = top10.joinToString("|") { "${it.score},${it.timestamp}" }
         prefs.edit().putString("top_scores_raw", serialized).apply()
         
-        return score > previousHigh && score > 0
+        return score > previousHigh
     }
 
     fun getHighScore(): Int {

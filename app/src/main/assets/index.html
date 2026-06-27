@@ -487,6 +487,8 @@
         let lastSpawnTime = 0;
         let spawnInterval = SPAWN_INTERVAL_BASE;
         let screenShake = 0;
+        let isGameOverProcessed = false;
+        let isScoreSaved = false;
 
         // Lists
         let stars = [];
@@ -539,6 +541,8 @@
 
         // Save high score if necessary
         function checkAndSaveScore() {
+            if (isScoreSaved) return;
+            isScoreSaved = true;
             try {
                 if (window.AndroidGame && typeof window.AndroidGame.saveNativeScore === 'function') {
                     window.AndroidGame.saveNativeScore(score);
@@ -1060,6 +1064,9 @@
             enemies = [];
             particles = [];
             
+            isGameOverProcessed = false;
+            isScoreSaved = false;
+            
             player.x = canvas.width / 2;
             player.y = canvas.height * 0.8;
             player.targetX = player.x;
@@ -1092,6 +1099,8 @@
         }
 
         function endGame() {
+            if (isGameOverProcessed) return;
+            isGameOverProcessed = true;
             gameState = 'GAMEOVER';
             hud.classList.add('hidden');
             controlHint.style.display = 'none';
