@@ -275,10 +275,6 @@
                 <span id="score-display" class="hud-val">00000</span>
             </div>
             <div class="hud-item" style="align-items: center;">
-                <span class="hud-label">Coins</span>
-                <span id="coins-display" class="hud-val" style="color: #ffd700; text-shadow: 0 0 8px rgba(255, 215, 0, 0.6);">0000</span>
-            </div>
-            <div class="hud-item" style="align-items: center;">
                 <span class="hud-label">Armor</span>
                 <div id="lives-display" class="lives-container">
                     <!-- Dynamic Hearts (Max 5) -->
@@ -288,29 +284,10 @@
                     <svg class="life-heart lost" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                     <svg class="life-heart lost" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                 </div>
-                <!-- Player Health Bar -->
-                <div id="player-health-bar-container" style="width: 80px; height: 6px; background: rgba(0, 0, 0, 0.5); border: 1px solid rgba(0, 240, 255, 0.4); border-radius: 3px; overflow: hidden; margin-top: 4px; box-shadow: 0 0 6px rgba(0, 240, 255, 0.25);">
-                    <div id="player-health-fill" style="width: 60%; height: 100%; background: linear-gradient(90deg, #00f0ff, #00ff66); transition: width 0.25s ease-out-in;"></div>
-                </div>
-            </div>
-            <div class="hud-item" style="align-items: center;">
-                <span class="hud-label">Sector</span>
-                <span id="level-display" class="hud-val" style="color: #ff0080; text-shadow: 0 0 8px rgba(255, 0, 128, 0.6);">1</span>
             </div>
             <div class="hud-item" style="align-items: flex-end;">
                 <span class="hud-label">Best</span>
                 <span id="high-score-display" class="hud-val">00000</span>
-            </div>
-        </div>
-
-        <!-- Boss Health Bar HUD -->
-        <div id="boss-hud" class="hidden" style="position: absolute; top: 75px; left: 50%; transform: translateX(-50%); width: 75%; max-width: 480px; display: flex; flex-direction: column; gap: 4px; align-items: center; z-index: 5; pointer-events: none;">
-            <div style="display: flex; justify-content: space-between; width: 100%; font-size: 0.75rem; font-family: monospace; letter-spacing: 2px; text-transform: uppercase;">
-                <span id="boss-name" style="color: #ff0055; font-weight: bold; text-shadow: 0 0 10px rgba(255, 0, 85, 0.5);">BOSS DETECTED</span>
-                <span id="boss-hp-text" style="color: #ff0055; font-weight: bold;">100%</span>
-            </div>
-            <div style="width: 100%; height: 8px; background: rgba(0, 0, 0, 0.6); border: 1.5px solid #ff0055; border-radius: 4px; overflow: hidden; box-shadow: 0 0 10px rgba(255, 0, 85, 0.35);">
-                <div id="boss-health-fill" style="width: 100%; height: 100%; background: linear-gradient(90deg, #ff0055, #ff5500); transition: width 0.1s ease-out;"></div>
             </div>
         </div>
 
@@ -326,31 +303,6 @@
                     </div>
                 </div>
                 <button id="start-button" class="btn-cyber">Launch Mission</button>
-            </div>
-        </div>
-
-        <!-- Level Complete Screen Overlay -->
-        <div id="level-complete-screen" class="overlay hidden">
-            <div class="glass-panel" style="border-color: #00ff66; box-shadow: 0 0 25px rgba(0, 255, 102, 0.35);">
-                <h1 style="background: linear-gradient(45deg, #00ff66, #00f0ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Sector Cleared</h1>
-                <p id="level-complete-subtitle" class="subtitle" style="color: #b3ffcc;">Sector Secured</p>
-                
-                <div class="stats-box">
-                    <div class="stat-row">
-                        <span class="stat-label">Bonus Points</span>
-                        <span id="level-bonus-points" class="stat-value" style="color: #00ff66;">+0</span>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">Coins Awarded</span>
-                        <span id="level-bonus-coins" class="stat-value" style="color: #ffd700;">+0</span>
-                    </div>
-                    <div class="stat-row">
-                        <span class="stat-label">Total Coins</span>
-                        <span id="level-total-coins" class="stat-value" style="color: #ffd700;">0</span>
-                    </div>
-                </div>
-                
-                <button id="next-level-button" class="btn-cyber" style="border-color: #00ff66; box-shadow: 0 0 15px rgba(0, 255, 102, 0.2);">Next Sector</button>
             </div>
         </div>
 
@@ -688,10 +640,6 @@
         const hud = document.getElementById('hud');
         const controlHint = document.getElementById('control-hint');
         const hearts = document.querySelectorAll('.life-heart');
-        const coinsDisplay = document.getElementById('coins-display');
-        const levelDisplay = document.getElementById('level-display');
-        const levelCompleteScreen = document.getElementById('level-complete-screen');
-        const bossHud = document.getElementById('boss-hud');
 
         // Configurable Parameters
         const SPAWN_INTERVAL_BASE = 1200; // Starting spawns in ms
@@ -699,7 +647,7 @@
         const STAR_COUNT = 100;
 
         // Game State Variables
-        let gameState = 'START'; // 'START' | 'PLAYING' | 'GAMEOVER' | 'LEVELCOMPLETE'
+        let gameState = 'START'; // 'START' | 'PLAYING' | 'GAMEOVER'
         let score = 0;
         let lives = 3;
         let lastTime = 0;
@@ -711,24 +659,9 @@
         let isScoreSaved = false;
         let isGamePaused = false;
 
-        // Level & Upgrades state
-        let currentLevel = 1;
-        let levelKills = 0;
-        let targetKills = 10;
-        let totalCoins = 0;
-        let runCoins = 0;
-        let levelState = 'SPAWNING_MINIONS'; // 'SPAWNING_MINIONS' | 'CLEARING_MINIONS' | 'BOSS_INCOMING' | 'BOSS_FIGHT' | 'BOSS_DEFEATED' | 'COMPLETED'
-
-        // Boss states
-        let activeBoss = null;
-        let bossIncomingTimer = 0;
-        let bossDestructionTimer = 0;
-        let bossExplosionTimer = 0;
-
         // Lists
         let stars = [];
         let bullets = [];
-        let enemyBullets = []; // Fired by bosses / special enemies
         let enemies = [];
         let powerups = [];
 
@@ -745,9 +678,6 @@
             thrusterFlicker: 0,
             pulseSize: 0,
             power: 1,
-            hasShield: false,
-            shootType: 'normal', // 'normal' | 'double' | 'triple'
-            powerupTime: 0,
             hasRapidFire: false,
             rapidFireTime: 0
         };
@@ -1140,37 +1070,15 @@
                     ctx.stroke();
                 }
             }
-
-            // Draw Enemy Lasers
-            for (let i = 0; i < enemyBullets.length; i++) {
-                const eb = enemyBullets[i];
-                if (eb.active && eb.y > -20 && eb.y < canvas.height + 20) {
-                    eb.draw();
-                }
-            }
         }
 
-        // --- 10 Level Definitions ---
-        const LEVELS = {
-            1: { name: "Nebula Outpost", targetKills: 35, spawnRate: 1600, speeds: 1.0, boss: false },
-            2: { name: "Asteroid Field", targetKills: 45, spawnRate: 1400, speeds: 1.2, boss: false },
-            3: { name: "Plasma Storm", targetKills: 55, spawnRate: 1250, speeds: 1.4, boss: false },
-            4: { name: "Elite Sector", targetKills: 65, spawnRate: 1100, speeds: 1.6, boss: false },
-            5: { name: "Krell Dreadnought", targetKills: 40, spawnRate: 1000, speeds: 1.8, boss: 'Krell Dreadnought' },
-            6: { name: "Deep Space Void", targetKills: 60, spawnRate: 1100, speeds: 2.0, boss: false },
-            7: { name: "Comet Belt", targetKills: 70, spawnRate: 1000, speeds: 2.2, boss: false },
-            8: { name: "Hyperdrive Lane", targetKills: 80, spawnRate: 900, speeds: 2.4, boss: false },
-            9: { name: "Warp Sector Gamma", targetKills: 95, spawnRate: 800, speeds: 2.6, boss: false },
-            10: { name: "Devastator Core", targetKills: 50, spawnRate: 700, speeds: 2.8, boss: 'Devastator Star' }
-        };
-
-        // --- Collectibles (Powerups and Coins) ---
+        // --- Collectibles (Powerups) ---
         class PowerUp {
             constructor() {
                 this.active = false;
                 this.x = 0;
                 this.y = 0;
-                this.type = ''; // 'shield', 'double', 'triple', 'rapid', 'life', 'coin'
+                this.type = ''; // 'rapid', 'life'
                 this.size = 24;
                 this.vy = 2.2;
                 this.pulse = 0;
@@ -1192,19 +1100,7 @@
             draw() {
                 let color = '#fff';
                 let label = '';
-                if (this.type === 'coin') {
-                    color = '#ffd700';
-                    label = '🪙';
-                } else if (this.type === 'shield') {
-                    color = '#00f0ff';
-                    label = 'S';
-                } else if (this.type === 'double') {
-                    color = '#ffff00';
-                    label = 'D';
-                } else if (this.type === 'triple') {
-                    color = '#ff00ff';
-                    label = 'T';
-                } else if (this.type === 'rapid') {
+                if (this.type === 'rapid') {
                     color = '#00ff66';
                     label = 'R';
                 } else if (this.type === 'life') {
@@ -1229,133 +1125,6 @@
             }
         }
 
-        // --- Enemy Laser Bullet ---
-        class EnemyBullet {
-            constructor() {
-                this.active = false;
-                this.x = 0;
-                this.y = 0;
-                this.vx = 0;
-                this.vy = 0;
-                this.size = 5;
-                this.color = '#ff0055';
-            }
-            init(x, y, vx, vy) {
-                this.active = true;
-                this.x = x;
-                this.y = y;
-                this.vx = vx;
-                this.vy = vy;
-                this.size = 5;
-                this.color = '#ff0055';
-            }
-            update(dt) {
-                const mod = dt / 16.66;
-                this.x += this.vx * mod;
-                this.y += this.vy * mod;
-                return this.y > canvas.height + 20 || this.y < -20 || this.x < -20 || this.x > canvas.width + 20;
-            }
-            draw() {
-                ctx.fillStyle = '#fff';
-                ctx.strokeStyle = this.color;
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
-            }
-        }
-
-        // --- Boss Battles ---
-        class Boss {
-            constructor(name, hp, color) {
-                this.name = name;
-                this.maxHp = hp;
-                this.hp = hp;
-                this.color = color;
-                this.width = 110;
-                this.height = 70;
-                this.x = canvas.width / 2;
-                this.y = -100; // spawn off-screen
-                this.targetY = 120; // stop at upper sector
-                this.vx = 2.4;
-                this.shootTimer = 0;
-            }
-            update(dt) {
-                const mod = dt / 16.66;
-                if (this.y < this.targetY) {
-                    this.y += 1.8 * mod;
-                } else {
-                    // Sway side to side
-                    this.x += this.vx * mod;
-                    if (this.x < this.width || this.x > canvas.width - this.width) {
-                        this.vx = -this.vx;
-                    }
-                }
-
-                // Shoot weapons
-                this.shootTimer += dt;
-                if (this.shootTimer > 850) {
-                    this.shootTimer = 0;
-                    this.shoot();
-                }
-            }
-            shoot() {
-                sound.playShoot();
-                if (this.name === 'Krell Dreadnought') {
-                    // Spread 3 downwards
-                    spawnEnemyBullet(this.x, this.y + 20, 0, 5);
-                    spawnEnemyBullet(this.x - 30, this.y + 15, -1.6, 4.6);
-                    spawnEnemyBullet(this.x + 30, this.y + 15, 1.6, 4.6);
-                } else {
-                    // Devastator Star: 5 spiral waves
-                    const numLasers = 5;
-                    for (let i = 0; i < numLasers; i++) {
-                        const angle = (i - (numLasers - 1) / 2) * 0.32 + Math.PI / 2;
-                        spawnEnemyBullet(this.x, this.y + 25, Math.cos(angle) * 5.8, Math.sin(angle) * 5.8);
-                    }
-                }
-            }
-            draw() {
-                ctx.save();
-                ctx.strokeStyle = this.color;
-                ctx.fillStyle = 'rgba(10, 5, 25, 0.9)';
-                ctx.lineWidth = 3.5;
-                ctx.shadowColor = this.color;
-                ctx.shadowBlur = 15;
-
-                ctx.beginPath();
-                if (this.name === 'Krell Dreadnought') {
-                    ctx.moveTo(this.x, this.y + this.height / 2);
-                    ctx.lineTo(this.x + this.width / 2, this.y);
-                    ctx.lineTo(this.x + this.width / 3, this.y - this.height / 2);
-                    ctx.lineTo(this.x - this.width / 3, this.y - this.height / 2);
-                    ctx.lineTo(this.x - this.width / 2, this.y);
-                } else {
-                    // Devastator Star: Cyber Spiked Orb shape
-                    const r = this.width / 1.8;
-                    const points = 10;
-                    for (let i = 0; i < points * 2; i++) {
-                        const angle = (i * Math.PI) / points;
-                        const currR = i % 2 === 0 ? r : r * 0.55;
-                        ctx.lineTo(this.x + Math.cos(angle) * currR, this.y + Math.sin(angle) * currR);
-                    }
-                }
-                ctx.closePath();
-                ctx.fill();
-                ctx.stroke();
-
-                // Thrust particles glow
-                ctx.fillStyle = '#ff3c00';
-                ctx.beginPath();
-                ctx.arc(this.x - 20, this.y - this.height / 2, 8, 0, Math.PI * 2);
-                ctx.arc(this.x + 20, this.y - this.height / 2, 8, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.restore();
-            }
-        }
-
         // --- Enemy System ---
         class Enemy {
             constructor() {
@@ -1365,16 +1134,9 @@
                 this.x = 0;
                 this.y = 0;
                 this.speed = 0;
-                this.angle = 0;
-                this.sinSpeed = 0;
-                this.sinAmp = 0;
-                this.type = '';
                 this.color = '';
                 this.scoreVal = 0;
                 this.hp = 0;
-                this.vx = 0;
-                this.hunterSpeed = 0;
-                this.isCharging = false;
             }
 
             init() {
@@ -1383,97 +1145,15 @@
                 this.height = this.width;
                 this.x = Math.random() * (canvas.width - 40) + 20;
                 this.y = -this.height;
-                this.vx = 0;
-                this.hunterSpeed = 0;
-                this.isCharging = false;
-                
-                // Speed adjusts by level factor
-                const levelConfig = LEVELS[currentLevel] || LEVELS[1];
-                const speedMult = levelConfig.speeds || 1.8;
-                this.speed = (Math.random() * 1.5 + 1.2) * speedMult;
-                this.angle = 0;
-                this.sinSpeed = Math.random() * 0.03 + 0.012;
-                this.sinAmp = (Math.random() * 1.5 + 1.0) * 1.5;
-                
-                const typeRand = Math.random();
-                if (typeRand < 0.16) {
-                    this.type = 'striker'; // Fast direct
-                    this.color = '#ff003c';
-                    this.speed += 1.2;
-                    this.scoreVal = 10;
-                    this.hp = 1;
-                } else if (typeRand < 0.32) {
-                    this.type = 'weaver'; // Sinusoidal weave
-                    this.color = '#ff9f00';
-                    this.scoreVal = 15;
-                    this.hp = 1;
-                } else if (typeRand < 0.48) {
-                    this.type = 'zigzagger'; // Sharp diagonal zig-zag bouncing off walls
-                    this.color = '#00ff66';
-                    this.vx = (Math.random() < 0.5 ? -1.6 : 1.6) * speedMult;
-                    this.scoreVal = 20;
-                    this.hp = 2;
-                } else if (typeRand < 0.64) {
-                    this.type = 'hunter'; // Actively steers horizontally towards player
-                    this.color = '#00f0ff';
-                    this.hunterSpeed = (Math.random() * 0.6 + 0.6) * speedMult;
-                    this.scoreVal = 25;
-                    this.hp = 2;
-                } else if (typeRand < 0.80) {
-                    this.type = 'kamikaze'; // Slow descent, then charges rapid downward-diagonal path
-                    this.color = '#ff33ff';
-                    this.speed = 1.0 * speedMult;
-                    this.scoreVal = 30;
-                    this.hp = 1;
-                } else if (typeRand < 0.92) {
-                    this.type = 'elite'; // Bigger heavy tank
-                    this.color = '#bf00ff';
-                    this.width = 46;
-                    this.height = 46;
-                    this.hp = 3;
-                    this.scoreVal = 40;
-                } else {
-                    this.type = 'meteor'; // Slow heavy obstacle
-                    this.color = '#7f8c8d';
-                    this.speed -= 0.6;
-                    this.scoreVal = 10;
-                    this.hp = 2;
-                }
+                this.hp = 1;
+                this.scoreVal = 10;
+                this.color = '#ff003c';
+                this.speed = Math.random() * 1.5 + 1.2;
             }
 
             update(dt) {
                 const modifier = dt / 16.66;
                 this.y += this.speed * modifier;
-
-                if (this.type === 'weaver') {
-                    this.angle += this.sinSpeed * modifier;
-                    this.x += Math.sin(this.angle) * this.sinAmp * modifier;
-                } else if (this.type === 'zigzagger') {
-                    this.x += this.vx * modifier;
-                    const r = this.width / 2;
-                    if (this.x < r) {
-                        this.x = r;
-                        this.vx = -this.vx;
-                    } else if (this.x > canvas.width - r) {
-                        this.x = canvas.width - r;
-                        this.vx = -this.vx;
-                    }
-                } else if (this.type === 'hunter') {
-                    const diffX = player.x - this.x;
-                    if (Math.abs(diffX) > 5) {
-                        this.x += Math.sign(diffX) * this.hunterSpeed * modifier;
-                    }
-                } else if (this.type === 'kamikaze') {
-                    if (!this.isCharging && this.y > 150) {
-                        this.isCharging = true;
-                        const diffX = player.x - this.x;
-                        this.vx = (diffX / 12) * modifier;
-                        this.speed *= 2.5;
-                    }
-                    if (this.isCharging) {
-                        this.x += this.vx * modifier;
-                    }
-                }
 
                 // Keep inside screen bounds horizontally
                 const r = this.width / 2;
@@ -1490,51 +1170,13 @@
 
                 ctx.beginPath();
                 const r = this.width / 2;
-                if (this.type === 'striker') {
-                    const cx = this.x;
-                    const cy = this.y;
-                    for (let i = 0; i < 5; i++) {
-                        ctx.lineTo(cx + r * Math.cos((i * 4 * Math.PI) / 5 - Math.PI/2), cy + r * Math.sin((i * 4 * Math.PI) / 5 - Math.PI/2));
-                    }
-                } else if (this.type === 'weaver') {
-                    ctx.moveTo(this.x, this.y - r);
-                    ctx.lineTo(this.x + r, this.y);
-                    ctx.lineTo(this.x, this.y + r);
-                    ctx.lineTo(this.x - r, this.y);
-                } else if (this.type === 'zigzagger') {
-                    ctx.moveTo(this.x, this.y - r);
-                    ctx.lineTo(this.x + r, this.y + r);
-                    ctx.lineTo(this.x, this.y + r/2);
-                    ctx.lineTo(this.x - r, this.y + r);
-                } else if (this.type === 'hunter') {
-                    ctx.moveTo(this.x, this.y - r);
-                    ctx.lineTo(this.x + r, this.y);
-                    ctx.lineTo(this.x, this.y + r);
-                    ctx.lineTo(this.x - r, this.y);
-                } else if (this.type === 'kamikaze') {
-                    ctx.moveTo(this.x, this.y - r);
-                    ctx.lineTo(this.x + r, this.y + r);
-                    ctx.lineTo(this.x - r, this.y + r);
-                } else if (this.type === 'elite') {
-                    ctx.moveTo(this.x, this.y - r);
-                    ctx.lineTo(this.x + r, this.y - r / 3);
-                    ctx.lineTo(this.x + r * 0.7, this.y + r);
-                    ctx.lineTo(this.x - r * 0.7, this.y + r);
-                    ctx.lineTo(this.x - r, this.y - r / 3);
-                } else {
-                    ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
-                }
+                ctx.moveTo(this.x, this.y + r); // bottom apex (moving down)
+                ctx.lineTo(this.x - r, this.y - r); // top-left wing
+                ctx.lineTo(this.x, this.y - r / 2); // center rear
+                ctx.lineTo(this.x + r, this.y - r); // top-right wing
                 ctx.closePath();
                 ctx.fill();
                 ctx.stroke();
-
-                if (this.hp > 1) {
-                    ctx.fillStyle = '#fff';
-                    ctx.font = '9px monospace';
-                    ctx.textAlign = 'center';
-                    ctx.textBaseline = 'middle';
-                    ctx.fillText('HP:'+this.hp, this.x, this.y);
-                }
             }
         }
 
@@ -1688,7 +1330,6 @@
                     if (dist < collisionDist) {
                         bullet.active = false;
                         
-                        // Hurt enemy
                         enemy.hp--;
                         if (enemy.hp <= 0) {
                             enemy.active = false;
@@ -1696,20 +1337,12 @@
                             score += enemy.scoreVal;
                             scoreDisplay.textContent = String(score).padStart(5, '0');
                             
-                            // Progression update: we increment levelKills!
-                            levelKills++;
-
-                            // Powerups or Coin Drop physics
-                            const randDrop = Math.random();
-                            if (randDrop < 0.12 && (enemy.type === 'elite' || enemy.type === 'meteor')) {
-                                const types = ['shield', 'double', 'triple', 'rapid', 'life'];
-                                const chosen = types[Math.floor(Math.random() * types.length)];
+                            // Powerups drop physics (10% chance)
+                            if (Math.random() < 0.10) {
+                                const chosen = Math.random() < 0.5 ? 'rapid' : 'life';
                                 spawnPowerUp(enemy.x, enemy.y, chosen);
-                            } else if (randDrop < 0.35) {
-                                spawnPowerUp(enemy.x, enemy.y, 'coin');
                             }
                         } else {
-                            // Hit flash particle
                             spawnExplosion(bullet.x, bullet.y, '#ffffff', 3);
                         }
                         break;
@@ -1717,41 +1350,7 @@
                 }
             }
 
-            // 2. Bullets vs Active Boss (Only shootable/collidable during BOSS_FIGHT)
-            if (activeBoss && levelState === 'BOSS_FIGHT') {
-                for (let bIdx = 0; bIdx < bullets.length; bIdx++) {
-                    const bullet = bullets[bIdx];
-                    if (!bullet.active) continue;
-
-                    const dist = Math.hypot(bullet.x - activeBoss.x, bullet.y - activeBoss.y);
-                    const collisionDist = (activeBoss.width / 2) + bullet.size;
-
-                    if (dist < collisionDist) {
-                        bullet.active = false;
-                        activeBoss.hp--;
-                        
-                        // Update Health UI
-                        const hpPct = Math.max(0, Math.floor((activeBoss.hp / activeBoss.maxHp) * 100));
-                        document.getElementById('boss-hp-text').textContent = hpPct + "%";
-                        document.getElementById('boss-health-fill').style.width = hpPct + "%";
-
-                        if (activeBoss.hp <= 0) {
-                            // Boss defeated! We transition to BOSS_DEFEATED to play destruction animation
-                            levelState = 'BOSS_DEFEATED';
-                            bossDestructionTimer = 2000; // 2 seconds of glorious explosions
-                            bossExplosionTimer = 0;
-                            // Add a massive explosion at the start
-                            spawnExplosion(activeBoss.x, activeBoss.y, activeBoss.color, 35);
-                            score += currentLevel * 100;
-                            scoreDisplay.textContent = String(score).padStart(5, '0');
-                        } else {
-                            spawnExplosion(bullet.x, bullet.y, '#ffffff', 4);
-                        }
-                    }
-                }
-            }
-
-            // 3. Collectibles (Powerups / Coins) vs Player
+            // 2. Collectibles (Powerups) vs Player
             for (let i = 0; i < powerups.length; i++) {
                 const pu = powerups[i];
                 if (!pu.active) continue;
@@ -1761,26 +1360,14 @@
 
                 if (dist < collectionDist) {
                     pu.active = false;
-                    // Play collection audio and vibration
                     sound.playPowerUp();
                     if (window.AndroidGame && window.AndroidGame.vibrate) {
                         window.AndroidGame.vibrate(20);
                     }
 
-                    if (pu.type === 'coin') {
-                        runCoins++;
-                        coinsDisplay.textContent = String(runCoins).padStart(4, '0');
-                    } else if (pu.type === 'life') {
+                    if (pu.type === 'life') {
                         lives = Math.min(5, lives + 1);
                         updateLivesHUD();
-                    } else if (pu.type === 'shield') {
-                        player.hasShield = true;
-                    } else if (pu.type === 'double') {
-                        player.shootType = 'double';
-                        player.powerupTime = 8000; // 8 seconds
-                    } else if (pu.type === 'triple') {
-                        player.shootType = 'triple';
-                        player.powerupTime = 8000;
                     } else if (pu.type === 'rapid') {
                         player.hasRapidFire = true;
                         player.rapidFireTime = 8000;
@@ -1788,26 +1375,8 @@
                 }
             }
 
-            // 4. Enemy Laser Bullets vs Player
+            // 3. Enemies vs Player Ship
             if (player.invulnFrames <= 0) {
-                for (let i = 0; i < enemyBullets.length; i++) {
-                    const eb = enemyBullets[i];
-                    if (!eb.active) continue;
-
-                    const dist = Math.hypot(player.x - eb.x, player.y - eb.y);
-                    const hitDist = (player.width * 0.38) + eb.size;
-
-                    if (dist < hitDist) {
-                        eb.active = false;
-                        applyPlayerDamage();
-                        break;
-                    }
-                }
-            }
-
-            // 5. Enemies or Boss vs Player Ship
-            if (player.invulnFrames <= 0) {
-                // Enemies
                 for (let eIdx = 0; eIdx < enemies.length; eIdx++) {
                     const enemy = enemies[eIdx];
                     if (!enemy.active) continue;
@@ -1822,29 +1391,10 @@
                         break;
                     }
                 }
-
-                // Boss (Only collides with player when actively fighting)
-                if (activeBoss && levelState === 'BOSS_FIGHT') {
-                    const dist = Math.hypot(player.x - activeBoss.x, player.y - activeBoss.y);
-                    if (dist < (player.width * 0.4) + (activeBoss.width * 0.45)) {
-                        applyPlayerDamage();
-                    }
-                }
             }
         }
 
         function applyPlayerDamage() {
-            if (player.hasShield) {
-                player.hasShield = false;
-                player.invulnFrames = 1000; // 1s brief protection
-                sound.playHurt();
-                if (window.AndroidGame && window.AndroidGame.vibrate) {
-                    window.AndroidGame.vibrate(50);
-                }
-                screenShake = 10;
-                return;
-            }
-
             lives--;
             sound.playHurt();
             if (window.AndroidGame && window.AndroidGame.vibrate) {
@@ -1869,77 +1419,10 @@
                     heart.classList.remove('lost');
                 }
             });
-            const pFill = document.getElementById('player-health-fill');
-            if (pFill) {
-                pFill.style.width = ((lives / 5) * 100) + "%";
-            }
-        }
-
-        function clearLevel() {
-            if (gameState !== 'PLAYING') return;
-            gameState = 'LEVELCOMPLETE';
-            isGamePaused = false;
-            
-            sound.stopMusic();
-            sound.playPowerUp();
-            
-            // Level Bonuses
-            const scoreBonus = currentLevel * 100;
-            const coinsBonus = currentLevel * 10;
-            
-            score += scoreBonus;
-            totalCoins += runCoins + coinsBonus;
-            
-            scoreDisplay.textContent = String(score).padStart(5, '0');
-            
-            // Persist total coins
-            try {
-                if (window.AndroidGame && typeof window.AndroidGame.saveTotalCoins === 'function') {
-                    window.AndroidGame.saveTotalCoins(totalCoins);
-                } else {
-                    localStorage.setItem('space_shooter_coins', totalCoins);
-                }
-            } catch (e) {
-                localStorage.setItem('space_shooter_coins', totalCoins);
-            }
-            
-            // Persist level progress
-            try {
-                if (window.AndroidGame && typeof window.AndroidGame.getHighestLevel === 'function') {
-                    const highest = window.AndroidGame.getHighestLevel();
-                    if (currentLevel >= highest && currentLevel < 10) {
-                        window.AndroidGame.saveHighestLevel(currentLevel + 1);
-                    }
-                }
-            } catch (e) {
-                console.error(e);
-            }
-            
-            checkAndSaveScore();
-            
-            // Setup Complete Screen Display UI
-            document.getElementById('level-bonus-points').textContent = "+" + scoreBonus;
-            document.getElementById('level-bonus-coins').textContent = "+" + coinsBonus;
-            document.getElementById('level-total-coins').textContent = totalCoins;
-            document.getElementById('level-complete-subtitle').textContent = "Sector " + currentLevel + " Secured Successfully";
-            
-            const nextLvlBtn = document.getElementById('next-level-button');
-            if (nextLvlBtn) {
-                if (currentLevel >= 10) {
-                    nextLvlBtn.textContent = "Complete Campaign";
-                } else {
-                    nextLvlBtn.textContent = "Next Sector";
-                }
-            }
-            
-            hud.classList.add('hidden');
-            bossHud.classList.add('hidden');
-            levelCompleteScreen.classList.remove('hidden');
-            controlHint.style.display = 'none';
         }
 
         // --- Game Flow Control States ---
-        window.startGame = function(levelNum) {
+        window.startGame = function() {
             sound.init();
             sound.stopMusic();
             sound.startMusic();
@@ -1950,47 +1433,8 @@
             
             gameState = 'PLAYING';
             isGamePaused = false;
-            
-            // Retrieve persistent total coins
-            try {
-                if (window.AndroidGame && typeof window.AndroidGame.getTotalCoins === 'function') {
-                    totalCoins = window.AndroidGame.getTotalCoins();
-                } else {
-                    totalCoins = parseInt(localStorage.getItem('space_shooter_coins') || '0', 10);
-                }
-            } catch (e) {
-                totalCoins = parseInt(localStorage.getItem('space_shooter_coins') || '0', 10);
-            }
-            
-            runCoins = 0;
-            
-            // Set sector level
-            if (typeof levelNum === 'number') {
-                currentLevel = levelNum;
-            } else {
-                try {
-                    if (window.AndroidGame && typeof window.AndroidGame.getHighestLevel === 'function') {
-                        currentLevel = window.AndroidGame.getHighestLevel();
-                    } else {
-                        currentLevel = 1;
-                    }
-                } catch (e) {
-                    currentLevel = 1;
-                }
-            }
-            
-            levelKills = 0;
-            const config = LEVELS[currentLevel] || LEVELS[1];
-            targetKills = config.targetKills;
-            spawnInterval = config.spawnRate;
-            
-            // Initialize Level State Machine
-            levelState = 'SPAWNING_MINIONS';
-            bossIncomingTimer = 0;
-            bossDestructionTimer = 0;
-            bossExplosionTimer = 0;
-            activeBoss = null;
-            bossHud.classList.add('hidden');
+            score = 0;
+            spawnInterval = SPAWN_INTERVAL_BASE;
             
             // Reset player states
             player.x = canvas.width / 2;
@@ -1998,19 +1442,14 @@
             player.targetX = player.x;
             player.targetY = player.y;
             player.invulnFrames = 0;
-            player.hasShield = false;
-            player.shootType = 'normal';
-            player.powerupTime = 0;
             player.hasRapidFire = false;
             player.rapidFireTime = 0;
             
             lives = 3;
             bullets = [];
-            enemyBullets = [];
             enemies = [];
             powerups = [];
             bulletPool.forEach(b => b.active = false);
-            enemyBulletPool.forEach(eb => eb.active = false);
             enemyPool.forEach(e => e.active = false);
             powerUpPool.forEach(p => p.active = false);
             particlePool.forEach(p => p.active = false);
@@ -2024,13 +1463,10 @@
             
             // Update HUD text displays
             scoreDisplay.textContent = String(score).padStart(5, '0');
-            coinsDisplay.textContent = String(runCoins).padStart(4, '0');
-            levelDisplay.textContent = currentLevel;
             updateLivesHUD();
             
             startScreen.classList.add('hidden');
             gameOverScreen.classList.add('hidden');
-            levelCompleteScreen.classList.add('hidden');
             hud.classList.remove('hidden');
             controlHint.style.display = 'block';
             
@@ -2048,9 +1484,7 @@
             gameState = 'START';
             isGamePaused = false;
             hud.classList.add('hidden');
-            bossHud.classList.add('hidden');
             gameOverScreen.classList.add('hidden');
-            levelCompleteScreen.classList.add('hidden');
             startScreen.classList.remove('hidden');
             controlHint.style.display = 'block';
         }
@@ -2067,20 +1501,7 @@
                 window.AndroidGame.vibrate(300);
             }
 
-            // Save player coins accrued during run
-            totalCoins += runCoins;
-            try {
-                if (window.AndroidGame && typeof window.AndroidGame.saveTotalCoins === 'function') {
-                    window.AndroidGame.saveTotalCoins(totalCoins);
-                } else {
-                    localStorage.setItem('space_shooter_coins', totalCoins);
-                }
-            } catch (e) {
-                localStorage.setItem('space_shooter_coins', totalCoins);
-            }
-
             hud.classList.add('hidden');
-            bossHud.classList.add('hidden');
             controlHint.style.display = 'none';
             finalScoreDisplay.textContent = score;
             
@@ -2121,75 +1542,7 @@
 
         // UI Event Listeners
         startButton.addEventListener('click', () => { window.startGame(); });
-        restartButton.addEventListener('click', () => { window.startGame(currentLevel); });
-
-        const nextLevelButton = document.getElementById('next-level-button');
-        if (nextLevelButton) {
-            nextLevelButton.addEventListener('click', () => {
-                sound.playPowerUp();
-                levelCompleteScreen.classList.add('hidden');
-                if (currentLevel < 10) {
-                    window.startGame(currentLevel + 1);
-                } else {
-                    // All levels secured! Return to hangar
-                    if (window.AndroidGame && typeof window.AndroidGame.returnToMenu === 'function') {
-                        window.AndroidGame.returnToMenu();
-                    } else {
-                        window.showStartScreen();
-                    }
-                }
-            });
-        }
-
-        function drawBossIncomingWarning(timestamp) {
-            ctx.save();
-            // Flashing red overlay banner in center of the screen
-            const alpha = 0.25 + Math.sin(timestamp / 120) * 0.15;
-            ctx.fillStyle = `rgba(255, 0, 85, ${alpha})`;
-            ctx.fillRect(0, canvas.height / 2 - 75, canvas.width, 150);
-            
-            // Draw hazard warning stripes at the top and bottom of the banner
-            ctx.fillStyle = '#ffcc00';
-            const stripeWidth = 22;
-            const yTop = canvas.height / 2 - 75;
-            const yBot = canvas.height / 2 + 65;
-            
-            // Draw Top hazard stripes
-            ctx.beginPath();
-            for (let x = -stripeWidth; x < canvas.width + stripeWidth; x += stripeWidth * 2) {
-                ctx.moveTo(x, yTop);
-                ctx.lineTo(x + stripeWidth, yTop);
-                ctx.lineTo(x + stripeWidth + 12, yTop + 10);
-                ctx.lineTo(x + 12, yTop + 10);
-            }
-            ctx.closePath();
-            ctx.fill();
-
-            // Draw Bottom hazard stripes
-            ctx.beginPath();
-            for (let x = -stripeWidth; x < canvas.width + stripeWidth; x += stripeWidth * 2) {
-                ctx.moveTo(x, yBot);
-                ctx.lineTo(x + stripeWidth, yBot);
-                ctx.lineTo(x + stripeWidth + 12, yBot + 10);
-                ctx.lineTo(x + 12, yBot + 10);
-            }
-            ctx.closePath();
-            ctx.fill();
-
-            // Bold warning text
-            ctx.fillStyle = '#ffffff';
-            ctx.shadowColor = '#ff0055';
-            ctx.shadowBlur = 16;
-            ctx.font = 'bold 24px monospace';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('⚠️ WARNING: BOSS APPROACHING ⚠️', canvas.width / 2, canvas.height / 2 - 15);
-            
-            ctx.font = 'bold 16px monospace';
-            ctx.fillStyle = '#ffcc00';
-            ctx.fillText('SECTOR DEFENDER DETECTED IN ' + Math.ceil(bossIncomingTimer / 1000) + 'S', canvas.width / 2, canvas.height / 2 + 25);
-            ctx.restore();
-        }
+        restartButton.addEventListener('click', () => { window.startGame(); });
 
         // --- Main Animation Frame Loop ---
         function gameLoop(timestamp) {
@@ -2220,12 +1573,6 @@
             if (gameState === 'PLAYING') {
                 if (!isGamePaused) {
                     // Reduce weapon timers
-                    if (player.powerupTime > 0) {
-                        player.powerupTime -= dt;
-                        if (player.powerupTime <= 0) {
-                            player.shootType = 'normal';
-                        }
-                    }
                     if (player.rapidFireTime > 0) {
                         player.rapidFireTime -= dt;
                         if (player.rapidFireTime <= 0) {
@@ -2243,78 +1590,18 @@
                         lastShotTime = timestamp;
                     }
 
-                    // PROGRESSIVE LEVEL STATE MACHINE
-                    const config = LEVELS[currentLevel] || LEVELS[1];
-
-                    if (levelState === 'SPAWNING_MINIONS') {
-                        // Spawn normal enemies
-                        if (levelKills + enemies.length < targetKills) {
-                            if (timestamp - lastSpawnTime >= spawnInterval) {
-                                spawnEnemy();
-                                lastSpawnTime = timestamp;
-                            }
-                        } else {
-                            // All minions spawned, wait for them to be defeated
-                            levelState = 'CLEARING_MINIONS';
-                        }
-                    } else if (levelState === 'CLEARING_MINIONS') {
-                        // Level complete or Boss warning transition
-                        if (enemies.length === 0) {
-                            if (config.boss) {
-                                levelState = 'BOSS_INCOMING';
-                                bossIncomingTimer = 3000; // 3 seconds warning
-                                sound.playHurt(); // Warning alarm
-                            } else {
-                                levelState = 'COMPLETED';
-                                clearLevel();
-                            }
-                        }
-                    } else if (levelState === 'BOSS_INCOMING') {
-                        bossIncomingTimer -= dt;
-                        if (bossIncomingTimer <= 0) {
-                            levelState = 'BOSS_FIGHT';
-                            // Spawn Boss
-                            activeBoss = new Boss(config.boss, currentLevel === 5 ? 150 : 350, currentLevel === 5 ? '#ff0055' : '#00f0ff');
-                            bossHud.classList.remove('hidden');
-                            document.getElementById('boss-name').textContent = config.boss;
-                            document.getElementById('boss-hp-text').textContent = '100%';
-                            document.getElementById('boss-health-fill').style.width = '100%';
-                        }
-                    } else if (levelState === 'BOSS_FIGHT') {
-                        if (activeBoss) {
-                            activeBoss.update(dt);
-                        }
-                    } else if (levelState === 'BOSS_DEFEATED') {
-                        if (activeBoss) {
-                            // Drift slightly downward during explosions
-                            activeBoss.y += 0.5 * (dt / 16.66);
-                            
-                            // Render persistent fiery explosions
-                            bossExplosionTimer += dt;
-                            if (bossExplosionTimer >= 150) {
-                                bossExplosionTimer = 0;
-                                spawnExplosion(
-                                    activeBoss.x + (Math.random() * activeBoss.width - activeBoss.width / 2),
-                                    activeBoss.y + (Math.random() * activeBoss.height - activeBoss.height / 2),
-                                    ['#ff0055', '#ff5500', '#ffd700', '#ffffff'][Math.floor(Math.random() * 4)],
-                                    12
-                                );
-                            }
-                        }
-                        bossDestructionTimer -= dt;
-                        if (bossDestructionTimer <= 0) {
-                            activeBoss = null;
-                            bossHud.classList.add('hidden');
-                            levelState = 'COMPLETED';
-                            clearLevel();
-                        }
+                    // Progressive survival spawn speed (faster spawns as score increases)
+                    spawnInterval = Math.max(450, SPAWN_INTERVAL_BASE - Math.floor(score / 15) * 50);
+                    if (timestamp - lastSpawnTime >= spawnInterval) {
+                        spawnEnemy();
+                        lastSpawnTime = timestamp;
                     }
 
                     // Update physics systems
                     updateBullets(dt);
                     updateEnemies(dt);
                     
-                    // Collectibles (Powerups / Coins)
+                    // Collectibles (Powerups)
                     for (let i = 0; i < powerups.length; i++) {
                         const pu = powerups[i];
                         if (!pu.active) continue;
@@ -2330,20 +1617,6 @@
 
                 // Renderers (Always drawn to screen, freeze on pause)
                 drawPlayer();
-                
-                // Pulsing Shield around player ship
-                if (player.hasShield) {
-                    ctx.save();
-                    ctx.strokeStyle = '#00f0ff';
-                    ctx.lineWidth = 3.2;
-                    ctx.shadowColor = '#00f0ff';
-                    ctx.shadowBlur = 14;
-                    ctx.beginPath();
-                    ctx.arc(player.x, player.y, player.width * 0.9, 0, Math.PI * 2);
-                    ctx.stroke();
-                    ctx.restore();
-                }
-
                 drawBullets();
                 
                 // Draw collectibles
@@ -2355,17 +1628,7 @@
                 }
 
                 drawEnemies();
-                
-                if (activeBoss && (levelState === 'BOSS_FIGHT' || levelState === 'BOSS_DEFEATED')) {
-                    activeBoss.draw();
-                }
-
                 drawParticles();
-
-                // Draw warning banner during BOSS_INCOMING state
-                if (levelState === 'BOSS_INCOMING') {
-                    drawBossIncomingWarning(timestamp);
-                }
             } else {
                 // Not actively playing, particles still render and updates on unpaused states
                 if (!isGamePaused) {

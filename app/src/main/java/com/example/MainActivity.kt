@@ -220,17 +220,10 @@ class MainActivity : ComponentActivity() {
                             GameScreen.MENU -> {
                                 MainMenuOverlay(
                                     topScores = leaderboardList,
-                                    highestUnlockedLevel = highestLevelState,
-                                    totalCoins = totalCoinsState,
-                                    selectedLevel = selectedLevel,
-                                    onLevelSelected = { lvl ->
-                                        playClickSound()
-                                        selectedLevel = lvl
-                                    },
                                     onLaunchMission = {
                                         isPaused = false
                                         currentScreen = GameScreen.PLAYING
-                                        webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
+                                        webView?.evaluateJavascript("window.startGame()", null)
                                     },
                                     onSettingsClick = {
                                         playClickSound()
@@ -246,7 +239,7 @@ class MainActivity : ComponentActivity() {
                                     onDeployAgain = {
                                         isPaused = false
                                         currentScreen = GameScreen.PLAYING
-                                        webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
+                                        webView?.evaluateJavascript("window.startGame()", null)
                                     },
                                     onReturnToHangar = {
                                         isPaused = false
@@ -491,10 +484,6 @@ class GameInterface(
 @Composable
 fun MainMenuOverlay(
     topScores: List<LeaderboardEntry>,
-    highestUnlockedLevel: Int,
-    totalCoins: Int,
-    selectedLevel: Int,
-    onLevelSelected: (Int) -> Unit,
     onLaunchMission: () -> Unit,
     onSettingsClick: () -> Unit = {}
 ) {
@@ -537,86 +526,6 @@ fun MainMenuOverlay(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-
-            // Coins Display
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .background(Color(0xFFFFD700).copy(alpha = 0.12f), shape = RoundedCornerShape(12.dp))
-                    .border(BorderStroke(1.dp, Color(0xFFFFD700)), shape = RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = "🪙 ",
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = "TOTAL COINS: ",
-                    color = Color(0xFFFFD700),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-                Text(
-                    text = String.format("%04d", totalCoins),
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Level Selector Box
-            Text(
-                text = "SELECT MISSION SECTOR",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFFF0080),
-                letterSpacing = 1.sp,
-                modifier = Modifier.padding(bottom = 6.dp)
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0x33000000), shape = RoundedCornerShape(12.dp))
-                    .border(BorderStroke(1.dp, Color(0x22FFFFFF)), shape = RoundedCornerShape(12.dp))
-                    .padding(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Row 1: Levels 1-5
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    for (lvl in 1..5) {
-                        LevelSelectorItem(
-                            level = lvl,
-                            isUnlocked = lvl <= highestUnlockedLevel,
-                            isSelected = lvl == selectedLevel,
-                            onClick = { onLevelSelected(lvl) }
-                        )
-                    }
-                }
-
-                // Row 2: Levels 6-10
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    for (lvl in 6..10) {
-                        LevelSelectorItem(
-                            level = lvl,
-                            isUnlocked = lvl <= highestUnlockedLevel,
-                            isSelected = lvl == selectedLevel,
-                            onClick = { onLevelSelected(lvl) }
-                        )
-                    }
-                }
-            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -698,7 +607,7 @@ fun MainMenuOverlay(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "LAUNCH SECTOR $selectedLevel",
+                        text = "LAUNCH MISSION",
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
@@ -728,49 +637,6 @@ fun MainMenuOverlay(
                     tint = Color(0xFF00F0FF)
                 )
             }
-        }
-    }
-}
-
-@Composable
-fun LevelSelectorItem(
-    level: Int,
-    isUnlocked: Boolean,
-    isSelected: Boolean,
-    onClick: () -> Unit
-) {
-    val borderColor = if (isSelected) Color(0xFF00F0FF) else if (isUnlocked) Color(0x4400F0FF) else Color(0x11FFFFFF)
-    val backgroundBrush = if (isSelected) {
-        Brush.linearGradient(listOf(Color(0xFF005577), Color(0xFF0088AA)))
-    } else if (isUnlocked) {
-        Brush.linearGradient(listOf(Color(0x220A0F2D), Color(0x440A0F2D)))
-    } else {
-        Brush.linearGradient(listOf(Color(0x11000000), Color(0x11000000)))
-    }
-    val textColor = if (isSelected) Color.White else if (isUnlocked) Color(0xFF8FA0DD) else Color(0x338FA0DD)
-
-    Box(
-        modifier = Modifier
-            .size(width = 46.dp, height = 40.dp)
-            .border(BorderStroke(if (isSelected) 2.dp else 1.dp, borderColor), shape = RoundedCornerShape(8.dp))
-            .background(backgroundBrush, shape = RoundedCornerShape(8.dp))
-            .then(if (isUnlocked) Modifier.clickable { onClick() } else Modifier),
-        contentAlignment = Alignment.Center
-    ) {
-        if (isUnlocked) {
-            Text(
-                text = level.toString(),
-                color = textColor,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
-            )
-        } else {
-            Text(
-                text = "🔒",
-                fontSize = 11.sp,
-                color = Color(0x44FFFFFF)
-            )
         }
     }
 }
