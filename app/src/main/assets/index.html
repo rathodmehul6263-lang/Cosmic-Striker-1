@@ -382,6 +382,7 @@
                 this.musicPlaying = false;
                 this.musicNodes = [];
                 this.musicInterval = null;
+                this.explosionBuffer = null;
             }
 
             init() {
@@ -391,6 +392,14 @@
                     }
                     if (this.ctx && this.ctx.state === 'suspended') {
                         this.ctx.resume();
+                    }
+                    if (this.ctx && !this.explosionBuffer) {
+                        const bufferSize = this.ctx.sampleRate * 0.35;
+                        this.explosionBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                        const data = this.explosionBuffer.getChannelData(0);
+                        for (let i = 0; i < bufferSize; i++) {
+                            data[i] = Math.random() * 2 - 1;
+                        }
                     }
                 } catch (e) {
                     console.error("Audio init error", e);
@@ -426,17 +435,10 @@
                 try {
                     if (window.AndroidGame && !window.AndroidGame.isSoundEffectsEnabled()) return;
                     this.init();
-                    if (!this.ctx) return;
-                    const bufferSize = this.ctx.sampleRate * 0.35;
-                    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-                    const data = buffer.getChannelData(0);
-                    
-                    for (let i = 0; i < bufferSize; i++) {
-                        data[i] = Math.random() * 2 - 1;
-                    }
+                    if (!this.ctx || !this.explosionBuffer) return;
                     
                     const noiseNode = this.ctx.createBufferSource();
-                    noiseNode.buffer = buffer;
+                    noiseNode.buffer = this.explosionBuffer;
                     
                     const filter = this.ctx.createBiquadFilter();
                     filter.type = 'lowpass';
@@ -893,15 +895,12 @@
             for (let i = 0; i < PARTICLE_POOL_SIZE; i++) {
                 const p = particlePool[i];
                 if (p.active) {
-                    ctx.save();
                     ctx.globalAlpha = p.alpha;
                     ctx.fillStyle = p.color;
-                    ctx.beginPath();
-                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                    ctx.fill();
-                    ctx.restore();
+                    ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
                 }
             }
+            ctx.globalAlpha = 1.0;
         }
 
         // --- Player Controls & Input Handling ---
@@ -1080,98 +1079,60 @@
             sound.playShoot();
             
             if (player.shootType === 'normal') {
-                bullets.push({
-                    x: player.x,
-                    y: yStart,
-                    vy: -12,
-                    vx: 0,
-                    size: 5,
-                    color: '#00f0ff'
-                });
+                spawnBullet(player.x, yStart, -12, 0, 5, '#00f0ff');
             } else if (player.shootType === 'double') {
-                bullets.push({
-                    x: player.x - 14,
-                    y: yStart,
-                    vy: -12,
-                    vx: 0,
-                    size: 5,
-                    color: '#00f0ff'
-                });
-                bullets.push({
-                    x: player.x + 14,
-                    y: yStart,
-                    vy: -12,
-                    vx: 0,
-                    size: 5,
-                    color: '#00f0ff'
-                });
+                spawnBullet(player.x - 14, yStart, -12, 0, 5, '#00f0ff');
+                spawnBullet(player.x + 14, yStart, -12, 0, 5, '#00f0ff');
             } else if (player.shootType === 'triple') {
-                bullets.push({
-                    x: player.x,
-                    y: yStart,
-                    vy: -12,
-                    vx: 0,
-                    size: 5,
-                    color: '#ff00ff'
-                });
-                bullets.push({
-                    x: player.x - 12,
-                    y: yStart,
-                    vy: -11.5,
-                    vx: -2.2,
-                    size: 5,
-                    color: '#ff00ff'
-                });
-                bullets.push({
-                    x: player.x + 12,
-                    y: yStart,
-                    vy: -11.5,
-                    vx: 2.2,
-                    size: 5,
-                    color: '#ff00ff'
-                });
+                spawnBullet(player.x, yStart, -12, 0, 5, '#ff00ff');
+                spawnBullet(player.x - 12, yStart, -11.5, -2.2, 5, '#ff00ff');
+                spawnBullet(player.x + 12, yStart, -11.5, 2.2, 5, '#ff00ff');
             }
         }
 
         function updateBullets(dt) {
             const modifier = dt / 16.66;
-            for (let i = bullets.length - 1; i >= 0; i--) {
+            for (let i = 0; i < bullets.length; i++) {
                 const b = bullets[i];
+                if (!b.active) continue;
                 b.y += b.vy * modifier;
                 if (b.vx) b.x += b.vx * modifier;
                 if (b.y < -20 || b.x < -20 || b.x > canvas.width + 20) {
-                    bullets.splice(i, 1);
+                    b.active = false;
                 }
             }
 
             // Update Enemy Bullets
-            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+            for (let i = 0; i < enemyBullets.length; i++) {
                 const eb = enemyBullets[i];
-                const expired = eb.update(dt);
-                if (expired) {
-                    enemyBullets.splice(i, 1);
+                if (!eb.active) continue;
+                if (eb.update(dt)) {
+                    eb.active = false;
                 }
             }
         }
 
         function drawBullets() {
             // Draw Player Lasers
-            bullets.forEach(b => {
-                ctx.save();
-                ctx.fillStyle = '#fff';
-                ctx.strokeStyle = b.color;
-                ctx.lineWidth = 2.5;
-                ctx.beginPath();
-                ctx.moveTo(b.x, b.y);
-                ctx.lineTo(b.x + (b.vx || 0) * 1.5, b.y - 14);
-                ctx.stroke();
-                ctx.restore();
-            });
+            ctx.lineWidth = 2.5;
+            for (let i = 0; i < bullets.length; i++) {
+                const b = bullets[i];
+                if (b.active && b.y > -20 && b.y < canvas.height + 20) {
+                    ctx.strokeStyle = b.color;
+                    ctx.beginPath();
+                    ctx.moveTo(b.x, b.y);
+                    ctx.lineTo(b.x + (b.vx || 0) * 1.5, b.y - 14);
+                    ctx.stroke();
+                }
+            }
 
             // Draw Enemy Lasers
-            enemyBullets.forEach(eb => {
-                eb.draw();
-            });
+            for (let i = 0; i < enemyBullets.length; i++) {
+                const eb = enemyBullets[i];
+                if (eb.active && eb.y > -20 && eb.y < canvas.height + 20) {
+                    eb.draw();
+                }
+            }
         }
 
         // --- 10 Level Definitions ---
@@ -1190,10 +1151,20 @@
 
         // --- Collectibles (Powerups and Coins) ---
         class PowerUp {
-            constructor(x, y, type) {
+            constructor() {
+                this.active = false;
+                this.x = 0;
+                this.y = 0;
+                this.type = ''; // 'shield', 'double', 'triple', 'rapid', 'life', 'coin'
+                this.size = 24;
+                this.vy = 2.2;
+                this.pulse = 0;
+            }
+            init(x, y, type) {
+                this.active = true;
                 this.x = x;
                 this.y = y;
-                this.type = type; // 'shield', 'double', 'triple', 'rapid', 'life', 'coin'
+                this.type = type;
                 this.size = 24;
                 this.vy = 2.2;
                 this.pulse = 0;
@@ -1204,7 +1175,6 @@
                 return this.y > canvas.height + this.size;
             }
             draw() {
-                ctx.save();
                 let color = '#fff';
                 let label = '';
                 if (this.type === 'coin') {
@@ -1230,8 +1200,6 @@
                 ctx.strokeStyle = color;
                 ctx.fillStyle = 'rgba(10, 15, 30, 0.85)';
                 ctx.lineWidth = 2.5;
-                ctx.shadowColor = color;
-                ctx.shadowBlur = 10 + Math.sin(this.pulse) * 5;
 
                 ctx.beginPath();
                 ctx.arc(this.x, this.y, this.size / 2, 0, Math.PI * 2);
@@ -1243,13 +1211,22 @@
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(label, this.x, this.y);
-                ctx.restore();
             }
         }
 
         // --- Enemy Laser Bullet ---
         class EnemyBullet {
-            constructor(x, y, vx, vy) {
+            constructor() {
+                this.active = false;
+                this.x = 0;
+                this.y = 0;
+                this.vx = 0;
+                this.vy = 0;
+                this.size = 5;
+                this.color = '#ff0055';
+            }
+            init(x, y, vx, vy) {
+                this.active = true;
                 this.x = x;
                 this.y = y;
                 this.vx = vx;
@@ -1264,7 +1241,6 @@
                 return this.y > canvas.height + 20 || this.y < -20 || this.x < -20 || this.x > canvas.width + 20;
             }
             draw() {
-                ctx.save();
                 ctx.fillStyle = '#fff';
                 ctx.strokeStyle = this.color;
                 ctx.lineWidth = 2;
@@ -1272,7 +1248,6 @@
                 ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.stroke();
-                ctx.restore();
             }
         }
 
@@ -1314,15 +1289,15 @@
                 sound.playShoot();
                 if (this.name === 'Krell Dreadnought') {
                     // Spread 3 downwards
-                    enemyBullets.push(new EnemyBullet(this.x, this.y + 20, 0, 5));
-                    enemyBullets.push(new EnemyBullet(this.x - 30, this.y + 15, -1.6, 4.6));
-                    enemyBullets.push(new EnemyBullet(this.x + 30, this.y + 15, 1.6, 4.6));
+                    spawnEnemyBullet(this.x, this.y + 20, 0, 5);
+                    spawnEnemyBullet(this.x - 30, this.y + 15, -1.6, 4.6);
+                    spawnEnemyBullet(this.x + 30, this.y + 15, 1.6, 4.6);
                 } else {
                     // Devastator Star: 5 spiral waves
                     const numLasers = 5;
                     for (let i = 0; i < numLasers; i++) {
                         const angle = (i - (numLasers - 1) / 2) * 0.32 + Math.PI / 2;
-                        enemyBullets.push(new EnemyBullet(this.x, this.y + 25, Math.cos(angle) * 5.8, Math.sin(angle) * 5.8));
+                        spawnEnemyBullet(this.x, this.y + 25, Math.cos(angle) * 5.8, Math.sin(angle) * 5.8);
                     }
                 }
             }
@@ -1369,6 +1344,23 @@
         // --- Enemy System ---
         class Enemy {
             constructor() {
+                this.active = false;
+                this.width = 0;
+                this.height = 0;
+                this.x = 0;
+                this.y = 0;
+                this.speed = 0;
+                this.angle = 0;
+                this.sinSpeed = 0;
+                this.sinAmp = 0;
+                this.type = '';
+                this.color = '';
+                this.scoreVal = 0;
+                this.hp = 0;
+            }
+
+            init() {
+                this.active = true;
                 this.width = Math.random() * 15 + 25; // 25px - 40px
                 this.height = this.width;
                 this.x = Math.random() * (canvas.width - this.width) + this.width / 2;
@@ -1423,7 +1415,6 @@
             }
 
             draw() {
-                ctx.save();
                 ctx.strokeStyle = this.color;
                 ctx.fillStyle = 'rgba(12, 4, 15, 0.7)';
                 ctx.lineWidth = 2.5;
@@ -1464,42 +1455,163 @@
                     ctx.textBaseline = 'middle';
                     ctx.fillText('HP:'+this.hp, this.x, this.y);
                 }
+            }
+        }
 
-                ctx.restore();
+        // --- Object Pools & High-Performance Spawners ---
+        const BULLET_POOL_SIZE = 100;
+        const bulletPool = [];
+        for (let i = 0; i < BULLET_POOL_SIZE; i++) {
+            bulletPool.push({
+                active: false,
+                x: 0,
+                y: 0,
+                vy: 0,
+                vx: 0,
+                size: 5,
+                color: ''
+            });
+        }
+
+        function spawnBullet(x, y, vy, vx, size, color) {
+            for (let i = 0; i < BULLET_POOL_SIZE; i++) {
+                const b = bulletPool[i];
+                if (!b.active) {
+                    b.active = true;
+                    b.x = x;
+                    b.y = y;
+                    b.vy = vy;
+                    b.vx = vx;
+                    b.size = size;
+                    b.color = color;
+                    bullets.push(b);
+                    return b;
+                }
+            }
+            return null;
+        }
+
+        const ENEMY_BULLET_POOL_SIZE = 150;
+        const enemyBulletPool = [];
+        for (let i = 0; i < ENEMY_BULLET_POOL_SIZE; i++) {
+            enemyBulletPool.push(new EnemyBullet());
+        }
+
+        function spawnEnemyBullet(x, y, vx, vy) {
+            for (let i = 0; i < ENEMY_BULLET_POOL_SIZE; i++) {
+                const eb = enemyBulletPool[i];
+                if (!eb.active) {
+                    eb.init(x, y, vx, vy);
+                    enemyBullets.push(eb);
+                    return eb;
+                }
+            }
+            return null;
+        }
+
+        const ENEMY_POOL_SIZE = 80;
+        const enemyPool = [];
+        for (let i = 0; i < ENEMY_POOL_SIZE; i++) {
+            enemyPool.push(new Enemy());
+        }
+
+        function spawnEnemy() {
+            for (let i = 0; i < ENEMY_POOL_SIZE; i++) {
+                const e = enemyPool[i];
+                if (!e.active) {
+                    e.init();
+                    enemies.push(e);
+                    return e;
+                }
+            }
+            return null;
+        }
+
+        const POWERUP_POOL_SIZE = 50;
+        const powerUpPool = [];
+        for (let i = 0; i < POWERUP_POOL_SIZE; i++) {
+            powerUpPool.push(new PowerUp());
+        }
+
+        function spawnPowerUp(x, y, type) {
+            for (let i = 0; i < POWERUP_POOL_SIZE; i++) {
+                const pu = powerUpPool[i];
+                if (!pu.active) {
+                    pu.init(x, y, type);
+                    powerups.push(pu);
+                    return pu;
+                }
+            }
+            return null;
+        }
+
+        function pruneInactive() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                if (!bullets[i].active) {
+                    bullets[i] = bullets[bullets.length - 1];
+                    bullets.pop();
+                }
+            }
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                if (!enemyBullets[i].active) {
+                    enemyBullets[i] = enemyBullets[enemyBullets.length - 1];
+                    enemyBullets.pop();
+                }
+            }
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                if (!enemies[i].active) {
+                    enemies[i] = enemies[enemies.length - 1];
+                    enemies.pop();
+                }
+            }
+            for (let i = powerups.length - 1; i >= 0; i--) {
+                if (!powerups[i].active) {
+                    powerups[i] = powerups[powerups.length - 1];
+                    powerups.pop();
+                }
             }
         }
 
         function updateEnemies(dt) {
-            for (let i = enemies.length - 1; i >= 0; i--) {
+            for (let i = 0; i < enemies.length; i++) {
                 const enemy = enemies[i];
-                const oob = enemy.update(dt);
-                if (oob) {
-                    enemies.splice(i, 1);
+                if (!enemy.active) continue;
+                if (enemy.update(dt)) {
+                    enemy.active = false;
                 }
             }
         }
 
         function drawEnemies() {
-            enemies.forEach(e => e.draw());
+            for (let i = 0; i < enemies.length; i++) {
+                const e = enemies[i];
+                if (e.active && e.y > -e.height && e.y < canvas.height + e.height) {
+                    e.draw();
+                }
+            }
         }
 
         // --- Collision and Damage Logic ---
         function checkCollisions() {
             // 1. Bullets vs Normal Enemies
-            for (let bIdx = bullets.length - 1; bIdx >= 0; bIdx--) {
+            for (let bIdx = 0; bIdx < bullets.length; bIdx++) {
                 const bullet = bullets[bIdx];
-                for (let eIdx = enemies.length - 1; eIdx >= 0; eIdx--) {
+                if (!bullet.active) continue;
+
+                for (let eIdx = 0; eIdx < enemies.length; eIdx++) {
                     const enemy = enemies[eIdx];
+                    if (!enemy.active) continue;
 
                     const dist = Math.hypot(bullet.x - enemy.x, bullet.y - enemy.y);
                     const collisionDist = (enemy.width / 2) + bullet.size;
 
                     if (dist < collisionDist) {
-                        bullets.splice(bIdx, 1);
+                        bullet.active = false;
                         
                         // Hurt enemy
                         enemy.hp--;
                         if (enemy.hp <= 0) {
+                            enemy.active = false;
                             spawnExplosion(enemy.x, enemy.y, enemy.color, 16);
                             score += enemy.scoreVal;
                             scoreDisplay.textContent = String(score).padStart(5, '0');
@@ -1512,12 +1624,10 @@
                             if (randDrop < 0.12 && (enemy.type === 'elite' || enemy.type === 'meteor')) {
                                 const types = ['shield', 'double', 'triple', 'rapid', 'life'];
                                 const chosen = types[Math.floor(Math.random() * types.length)];
-                                powerups.push(new PowerUp(enemy.x, enemy.y, chosen));
+                                spawnPowerUp(enemy.x, enemy.y, chosen);
                             } else if (randDrop < 0.35) {
-                                powerups.push(new PowerUp(enemy.x, enemy.y, 'coin'));
+                                spawnPowerUp(enemy.x, enemy.y, 'coin');
                             }
-
-                            enemies.splice(eIdx, 1);
                         } else {
                             // Hit flash particle
                             spawnExplosion(bullet.x, bullet.y, '#ffffff', 3);
@@ -1529,13 +1639,15 @@
 
             // 2. Bullets vs Active Boss (Only shootable/collidable during BOSS_FIGHT)
             if (activeBoss && levelState === 'BOSS_FIGHT') {
-                for (let bIdx = bullets.length - 1; bIdx >= 0; bIdx--) {
+                for (let bIdx = 0; bIdx < bullets.length; bIdx++) {
                     const bullet = bullets[bIdx];
+                    if (!bullet.active) continue;
+
                     const dist = Math.hypot(bullet.x - activeBoss.x, bullet.y - activeBoss.y);
                     const collisionDist = (activeBoss.width / 2) + bullet.size;
 
                     if (dist < collisionDist) {
-                        bullets.splice(bIdx, 1);
+                        bullet.active = false;
                         activeBoss.hp--;
                         
                         // Update Health UI
@@ -1555,18 +1667,20 @@
                         } else {
                             spawnExplosion(bullet.x, bullet.y, '#ffffff', 4);
                         }
-                        break;
                     }
                 }
             }
 
             // 3. Collectibles (Powerups / Coins) vs Player
-            for (let i = powerups.length - 1; i >= 0; i--) {
+            for (let i = 0; i < powerups.length; i++) {
                 const pu = powerups[i];
+                if (!pu.active) continue;
+
                 const dist = Math.hypot(player.x - pu.x, player.y - pu.y);
                 const collectionDist = (player.width / 2.2) + (pu.size / 2);
 
                 if (dist < collectionDist) {
+                    pu.active = false;
                     // Play collection audio and vibration
                     sound.playPowerUp();
                     if (window.AndroidGame && window.AndroidGame.vibrate) {
@@ -1591,20 +1705,20 @@
                         player.hasRapidFire = true;
                         player.rapidFireTime = 8000;
                     }
-
-                    powerups.splice(i, 1);
                 }
             }
 
             // 4. Enemy Laser Bullets vs Player
             if (player.invulnFrames <= 0) {
-                for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                for (let i = 0; i < enemyBullets.length; i++) {
                     const eb = enemyBullets[i];
+                    if (!eb.active) continue;
+
                     const dist = Math.hypot(player.x - eb.x, player.y - eb.y);
                     const hitDist = (player.width * 0.38) + eb.size;
 
                     if (dist < hitDist) {
-                        enemyBullets.splice(i, 1);
+                        eb.active = false;
                         applyPlayerDamage();
                         break;
                     }
@@ -1614,14 +1728,16 @@
             // 5. Enemies or Boss vs Player Ship
             if (player.invulnFrames <= 0) {
                 // Enemies
-                for (let eIdx = enemies.length - 1; eIdx >= 0; eIdx--) {
+                for (let eIdx = 0; eIdx < enemies.length; eIdx++) {
                     const enemy = enemies[eIdx];
+                    if (!enemy.active) continue;
+
                     const dist = Math.hypot(player.x - enemy.x, player.y - enemy.y);
                     const playerRadius = player.width * 0.38;
                     const enemyRadius = enemy.width * 0.45;
 
                     if (dist < playerRadius + enemyRadius) {
-                        enemies.splice(eIdx, 1);
+                        enemy.active = false;
                         applyPlayerDamage();
                         break;
                     }
@@ -1808,8 +1924,12 @@
             bullets = [];
             enemyBullets = [];
             enemies = [];
-            particlePool.forEach(p => p.active = false);
             powerups = [];
+            bulletPool.forEach(b => b.active = false);
+            enemyBulletPool.forEach(eb => eb.active = false);
+            enemyPool.forEach(e => e.active = false);
+            powerUpPool.forEach(p => p.active = false);
+            particlePool.forEach(p => p.active = false);
             
             lastShotTime = performance.now();
             lastSpawnTime = performance.now();
@@ -2046,7 +2166,7 @@
                         // Spawn normal enemies
                         if (levelKills + enemies.length < targetKills) {
                             if (timestamp - lastSpawnTime >= spawnInterval) {
-                                enemies.push(new Enemy());
+                                spawnEnemy();
                                 lastSpawnTime = timestamp;
                             }
                         } else {
@@ -2111,16 +2231,17 @@
                     updateEnemies(dt);
                     
                     // Collectibles (Powerups / Coins)
-                    for (let i = powerups.length - 1; i >= 0; i--) {
+                    for (let i = 0; i < powerups.length; i++) {
                         const pu = powerups[i];
-                        const expired = pu.update(dt);
-                        if (expired) {
-                            powerups.splice(i, 1);
+                        if (!pu.active) continue;
+                        if (pu.update(dt)) {
+                            pu.active = false;
                         }
                     }
 
                     checkCollisions();
                     updateParticles(dt);
+                    pruneInactive();
                 }
 
                 // Renderers (Always drawn to screen, freeze on pause)
@@ -2142,7 +2263,12 @@
                 drawBullets();
                 
                 // Draw collectibles
-                powerups.forEach(pu => pu.draw());
+                for (let i = 0; i < powerups.length; i++) {
+                    const pu = powerups[i];
+                    if (pu.active && pu.y > -pu.size && pu.y < canvas.height + pu.size) {
+                        pu.draw();
+                    }
+                }
 
                 drawEnemies();
                 
