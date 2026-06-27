@@ -1,7 +1,11 @@
 package com.example
 
 import android.annotation.SuppressLint
+import android.content.Context
+import android.os.Build
 import android.os.Bundle
+import android.os.Vibrator
+import android.os.VibrationEffect
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.WebSettings
@@ -22,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,6 +40,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.DialogProperties
 import com.example.ui.theme.MyApplicationTheme
 import java.text.SimpleDateFormat
 import java.util.*
@@ -56,6 +62,64 @@ class MainActivity : ComponentActivity() {
     private var leaderboardList by mutableStateOf(listOf<LeaderboardEntry>())
     private var isScoreSavedForCurrentGame = false
 
+    // Sound, Music, Vibration, Pause states
+    private var isPaused by mutableStateOf(false)
+    private var showSettingsDialog by mutableStateOf(false)
+    
+    private var soundEffectsEnabledState by mutableStateOf(true)
+    private var musicEnabledState by mutableStateOf(true)
+    private var vibrationEnabledState by mutableStateOf(true)
+
+    fun getSoundEffectsEnabled(): Boolean = soundEffectsEnabledState
+    fun getMusicEnabled(): Boolean = musicEnabledState
+    fun getVibrationEnabled(): Boolean = vibrationEnabledState
+
+    fun setSoundEffectsEnabled(enabled: Boolean) {
+        soundEffectsEnabledState = enabled
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("settings_sound_effects", enabled).apply()
+        webView?.post {
+            webView?.evaluateJavascript("window.updateSettings()", null)
+        }
+    }
+
+    fun setMusicEnabled(enabled: Boolean) {
+        musicEnabledState = enabled
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("settings_music", enabled).apply()
+        webView?.post {
+            webView?.evaluateJavascript("window.updateSettings()", null)
+        }
+    }
+
+    fun setVibrationEnabled(enabled: Boolean) {
+        vibrationEnabledState = enabled
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("settings_vibration", enabled).apply()
+        webView?.post {
+            webView?.evaluateJavascript("window.updateSettings()", null)
+        }
+    }
+
+    fun vibratePhone(durationMs: Long) {
+        if (!vibrationEnabledState) return
+        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        if (vibrator != null && vibrator.hasVibrator()) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(durationMs)
+            }
+        }
+    }
+
+    fun playClickSound() {
+        webView?.post {
+            webView?.evaluateJavascript("sound.playClick()", null)
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,6 +127,12 @@ class MainActivity : ComponentActivity() {
 
         leaderboardManager = LeaderboardManager(this)
         leaderboardList = leaderboardManager.getTopScores()
+
+        // Load settings permanently from local storage (SharedPreferences)
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        soundEffectsEnabledState = prefs.getBoolean("settings_sound_effects", true)
+        musicEnabledState = prefs.getBoolean("settings_music", true)
+        vibrationEnabledState = prefs.getBoolean("settings_vibration", true)
 
         // Hide Android System Bars (Status and Navigation) to provide true immersive arcade view
         window.decorView.systemUiVisibility = (
@@ -104,13 +174,21 @@ class MainActivity : ComponentActivity() {
                         )
 
                         // Handle Android Back presses smoothly
-                        BackHandler(enabled = currentScreen != GameScreen.MENU) {
+                        BackHandler(enabled = true) {
                             if (currentScreen == GameScreen.PLAYING) {
-                                currentScreen = GameScreen.MENU
-                                webView?.evaluateJavascript("window.showStartScreen()", null)
+                                if (isPaused) {
+                                    isPaused = false
+                                    webView?.evaluateJavascript("window.resumeGame()", null)
+                                } else {
+                                    isPaused = true
+                                    webView?.evaluateJavascript("window.pauseGame()", null)
+                                }
                             } else if (currentScreen == GameScreen.GAMEOVER) {
                                 currentScreen = GameScreen.MENU
+                                isPaused = false
                                 webView?.evaluateJavascript("window.showStartScreen()", null)
+                            } else if (currentScreen == GameScreen.MENU) {
+                                finish()
                             }
                         }
 
@@ -120,8 +198,13 @@ class MainActivity : ComponentActivity() {
                                 MainMenuOverlay(
                                     topScores = leaderboardList,
                                     onLaunchMission = {
+                                        isPaused = false
                                         currentScreen = GameScreen.PLAYING
                                         webView?.evaluateJavascript("window.startGame()", null)
+                                    },
+                                    onSettingsClick = {
+                                        playClickSound()
+                                        showSettingsDialog = true
                                     }
                                 )
                             }
@@ -131,18 +214,91 @@ class MainActivity : ComponentActivity() {
                                     isNewHighScore = isNewHighScore,
                                     topScores = leaderboardList,
                                     onDeployAgain = {
+                                        isPaused = false
                                         currentScreen = GameScreen.PLAYING
                                         webView?.evaluateJavascript("window.startGame()", null)
                                     },
                                     onReturnToHangar = {
+                                        isPaused = false
                                         currentScreen = GameScreen.MENU
                                         webView?.evaluateJavascript("window.showStartScreen()", null)
                                     }
                                 )
                             }
                             GameScreen.PLAYING -> {
-                                // Playing state has no overlay on top of WebView
+                                if (!isPaused) {
+                                    // Professional Floating Pause Button at top-right corner
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(top = 40.dp, end = 16.dp),
+                                        contentAlignment = Alignment.TopEnd
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                playClickSound()
+                                                isPaused = true
+                                                webView?.evaluateJavascript("window.pauseGame()", null)
+                                            },
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .background(Color(0x88000000), shape = RoundedCornerShape(12.dp))
+                                                .border(BorderStroke(1.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(12.dp))
+                                        ) {
+                                            Row(
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(width = 4.dp, height = 16.dp)
+                                                        .background(Color(0xFF00F0FF), shape = RoundedCornerShape(1.dp))
+                                                )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(width = 4.dp, height = 16.dp)
+                                                        .background(Color(0xFF00F0FF), shape = RoundedCornerShape(1.dp))
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // Professional Cybernetic Pause Menu Overlay
+                                    PauseMenuOverlay(
+                                        onResume = {
+                                            isPaused = false
+                                            webView?.evaluateJavascript("window.resumeGame()", null)
+                                        },
+                                        onRestart = {
+                                            isPaused = false
+                                            webView?.evaluateJavascript("window.startGame()", null)
+                                        },
+                                        onMainMenu = {
+                                            isPaused = false
+                                            currentScreen = GameScreen.MENU
+                                            webView?.evaluateJavascript("window.showStartScreen()", null)
+                                        },
+                                        onSettings = {
+                                            showSettingsDialog = true
+                                        },
+                                        playClick = { playClickSound() }
+                                    )
+                                }
                             }
+                        }
+
+                        // Overlay Settings Dialog on top of any active screen when open
+                        if (showSettingsDialog) {
+                            SettingsDialog(
+                                soundEffectsEnabled = soundEffectsEnabledState,
+                                onSoundEffectsChanged = { setSoundEffectsEnabled(it) },
+                                musicEnabled = musicEnabledState,
+                                onMusicChanged = { setMusicEnabled(it) },
+                                vibrationEnabled = vibrationEnabledState,
+                                onVibrationChanged = { setVibrationEnabled(it) },
+                                onClose = { showSettingsDialog = false },
+                                playClick = { playClickSound() }
+                            )
                         }
                     }
                 }
@@ -249,12 +405,33 @@ class GameInterface(
             saveScore(score)
         }
     }
+
+    @android.webkit.JavascriptInterface
+    fun isSoundEffectsEnabled(): Boolean {
+        return activity.getSoundEffectsEnabled()
+    }
+
+    @android.webkit.JavascriptInterface
+    fun isMusicEnabled(): Boolean {
+        return activity.getMusicEnabled()
+    }
+
+    @android.webkit.JavascriptInterface
+    fun isVibrationEnabled(): Boolean {
+        return activity.getVibrationEnabled()
+    }
+
+    @android.webkit.JavascriptInterface
+    fun vibrate(durationMs: Int) {
+        activity.vibratePhone(durationMs.toLong())
+    }
 }
 
 @Composable
 fun MainMenuOverlay(
     topScores: List<LeaderboardEntry>,
-    onLaunchMission: () -> Unit
+    onLaunchMission: () -> Unit,
+    onSettingsClick: () -> Unit = {}
 ) {
     Box(
         modifier = Modifier
@@ -381,6 +558,28 @@ fun MainMenuOverlay(
                         letterSpacing = 2.sp
                     )
                 }
+            }
+        }
+
+        // Floating Settings Gear at the top right of the screen
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 40.dp, end = 24.dp),
+            contentAlignment = Alignment.TopEnd
+        ) {
+            IconButton(
+                onClick = onSettingsClick,
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(Color(0xAA0A0F2D), shape = RoundedCornerShape(12.dp))
+                    .border(BorderStroke(1.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(12.dp))
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = "System Settings",
+                    tint = Color(0xFF00F0FF)
+                )
             }
         }
     }
@@ -653,4 +852,310 @@ fun GameOverOverlay(
             }
         }
     }
+}
+
+@Composable
+fun PauseMenuOverlay(
+    onResume: () -> Unit,
+    onRestart: () -> Unit,
+    onMainMenu: () -> Unit,
+    onSettings: () -> Unit,
+    playClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0x99020208)), // Semi-transparent dark space overlay
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.85f)
+                .background(Color(0xEE0A0F2D), shape = RoundedCornerShape(16.dp))
+                .border(
+                    BorderStroke(2.dp, Brush.linearGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080)))),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Header
+            Text(
+                text = "MISSION PAUSED",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = FontFamily.SansSerif,
+                color = Color.White,
+                textAlign = TextAlign.Center
+            )
+            
+            Text(
+                text = "PILOT TACTICAL INTERFACE",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFF8FA0DD),
+                letterSpacing = 1.5.sp,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            // Resume Button
+            Button(
+                onClick = {
+                    playClick()
+                    onResume()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .border(BorderStroke(1.5.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(10.dp)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF001F30))
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = Color(0xFF00F0FF))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("RESUME MISSION", color = Color(0xFF00F0FF), fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                }
+            }
+
+            // Restart Button
+            Button(
+                onClick = {
+                    playClick()
+                    onRestart()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .border(BorderStroke(1.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(10.dp)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF001122))
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.Refresh, contentDescription = null, tint = Color.White)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("RESTART FIGHT", color = Color.White, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                }
+            }
+
+            // Settings Button
+            Button(
+                onClick = {
+                    playClick()
+                    onSettings()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .border(BorderStroke(1.dp, Color(0x8800F0FF)), shape = RoundedCornerShape(10.dp)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF001122))
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.Settings, contentDescription = null, tint = Color.White)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("SYSTEM SETTINGS", color = Color.White, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                }
+            }
+
+            // Main Menu Button
+            Button(
+                onClick = {
+                    playClick()
+                    onMainMenu()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .border(BorderStroke(1.dp, Color(0x33FFFFFF)), shape = RoundedCornerShape(10.dp)),
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.Home, contentDescription = null, tint = Color.LightGray)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("ABANDON TO HANGAR", color = Color.LightGray, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsDialog(
+    soundEffectsEnabled: Boolean,
+    onSoundEffectsChanged: (Boolean) -> Unit,
+    musicEnabled: Boolean,
+    onMusicChanged: (Boolean) -> Unit,
+    vibrationEnabled: Boolean,
+    onVibrationChanged: (Boolean) -> Unit,
+    onClose: () -> Unit,
+    playClick: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth(0.85f)
+            .border(
+                BorderStroke(2.dp, Brush.linearGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080)))),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        containerColor = Color(0xFB0A0F2D),
+        title = {
+            Text(
+                text = "SYSTEM SETTINGS",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.ExtraBold,
+                fontFamily = FontFamily.SansSerif,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Sound Effects Toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0x33000000), shape = RoundedCornerShape(8.dp))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "SOUND EFFECTS",
+                            color = Color(0xFF00F0FF),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "Blasters & explosions",
+                            color = Color.Gray,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.SansSerif
+                        )
+                    }
+                    Switch(
+                        checked = soundEffectsEnabled,
+                        onCheckedChange = {
+                            playClick()
+                            onSoundEffectsChanged(it)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF00F0FF),
+                            checkedTrackColor = Color(0x6600F0FF),
+                            uncheckedThumbColor = Color.Gray,
+                            uncheckedTrackColor = Color.DarkGray
+                        )
+                    )
+                }
+
+                // Music Toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0x33000000), shape = RoundedCornerShape(8.dp))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "SPACE MUSIC",
+                            color = Color(0xFF00F0FF),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "Looping cosmic drone",
+                            color = Color.Gray,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.SansSerif
+                        )
+                    }
+                    Switch(
+                        checked = musicEnabled,
+                        onCheckedChange = {
+                            playClick()
+                            onMusicChanged(it)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF00F0FF),
+                            checkedTrackColor = Color(0x6600F0FF),
+                            uncheckedThumbColor = Color.Gray,
+                            uncheckedTrackColor = Color.DarkGray
+                        )
+                    )
+                }
+
+                // Vibration Toggle
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0x33000000), shape = RoundedCornerShape(8.dp))
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "HAPTICS & VIBRATION",
+                            color = Color(0xFF00F0FF),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "Tactile ship damage",
+                            color = Color.Gray,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.SansSerif
+                        )
+                    }
+                    Switch(
+                        checked = vibrationEnabled,
+                        onCheckedChange = {
+                            playClick()
+                            onVibrationChanged(it)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color(0xFF00F0FF),
+                            checkedTrackColor = Color(0x6600F0FF),
+                            uncheckedThumbColor = Color.Gray,
+                            uncheckedTrackColor = Color.DarkGray
+                        )
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    playClick()
+                    onClose()
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .border(BorderStroke(1.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(8.dp)),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF002233)
+                )
+            ) {
+                Text(
+                    text = "CLOSE SYSTEMS",
+                    color = Color(0xFF00F0FF),
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+    )
 }

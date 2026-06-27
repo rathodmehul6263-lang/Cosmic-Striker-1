@@ -333,6 +333,9 @@
         class SoundEngine {
             constructor() {
                 this.ctx = null;
+                this.musicPlaying = false;
+                this.musicNodes = [];
+                this.musicInterval = null;
             }
 
             init() {
@@ -350,6 +353,7 @@
 
             playShoot() {
                 try {
+                    if (window.AndroidGame && !window.AndroidGame.isSoundEffectsEnabled()) return;
                     this.init();
                     if (!this.ctx) return;
                     const osc = this.ctx.createOscillator();
@@ -374,6 +378,7 @@
 
             playExplosion() {
                 try {
+                    if (window.AndroidGame && !window.AndroidGame.isSoundEffectsEnabled()) return;
                     this.init();
                     if (!this.ctx) return;
                     const bufferSize = this.ctx.sampleRate * 0.35;
@@ -409,6 +414,7 @@
 
             playHurt() {
                 try {
+                    if (window.AndroidGame && !window.AndroidGame.isSoundEffectsEnabled()) return;
                     this.init();
                     if (!this.ctx) return;
                     const osc = this.ctx.createOscillator();
@@ -433,6 +439,7 @@
 
             playPowerUp() {
                 try {
+                    if (window.AndroidGame && !window.AndroidGame.isSoundEffectsEnabled()) return;
                     this.init();
                     if (!this.ctx) return;
                     const now = this.ctx.currentTime;
@@ -451,6 +458,163 @@
                     });
                 } catch (e) {
                     console.error("playPowerUp error", e);
+                }
+            }
+
+            playClick() {
+                try {
+                    if (window.AndroidGame && !window.AndroidGame.isSoundEffectsEnabled()) return;
+                    this.init();
+                    if (!this.ctx) return;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(1200, this.ctx.currentTime);
+                    gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.05);
+                    
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    
+                    osc.start();
+                    osc.stop(this.ctx.currentTime + 0.05);
+                } catch (e) {
+                    console.error("playClick error", e);
+                }
+            }
+
+            playGameOver() {
+                try {
+                    if (window.AndroidGame && !window.AndroidGame.isSoundEffectsEnabled()) return;
+                    this.init();
+                    if (!this.ctx) return;
+                    const now = this.ctx.currentTime;
+                    const notes = [311.13, 293.66, 261.63, 196.00]; // Eb, D, C, G
+                    notes.forEach((freq, idx) => {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'triangle';
+                        osc.frequency.setValueAtTime(freq, now + idx * 0.15);
+                        gain.gain.setValueAtTime(0.1, now + idx * 0.15);
+                        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.15 + 0.3);
+                        osc.connect(gain);
+                        gain.connect(this.ctx.destination);
+                        osc.start(now + idx * 0.15);
+                        osc.stop(now + idx * 0.15 + 0.3);
+                    });
+                } catch (e) {
+                    console.error("playGameOver error", e);
+                }
+            }
+
+            startMusic() {
+                try {
+                    this.init();
+                    if (!this.ctx) return;
+                    if (this.musicPlaying) return;
+                    
+                    // Check settings
+                    if (window.AndroidGame && !window.AndroidGame.isMusicEnabled()) {
+                        return;
+                    }
+                    
+                    this.musicPlaying = true;
+                    this.musicNodes = [];
+                    
+                    // Sequence parameters: deep minor cyberpunk drone (Am -> F -> C -> G)
+                    const chords = [
+                        [110.00, 130.81, 164.81], // A2, C3, E3
+                        [87.31, 130.81, 174.61],  // F2, C3, F3
+                        [130.81, 164.81, 196.00], // C3, E3, G3
+                        [98.00, 146.83, 196.00]   // G2, D3, G3
+                    ];
+                    let currentChordIdx = 0;
+                    
+                    const playNextChord = () => {
+                        if (!this.musicPlaying) return;
+                        
+                        // Check settings again dynamically
+                        if (window.AndroidGame && !window.AndroidGame.isMusicEnabled()) {
+                            this.stopMusic();
+                            return;
+                        }
+
+                        const now = this.ctx.currentTime;
+                        const duration = 4.0; // 4 seconds per chord
+                        
+                        const chordNotes = chords[currentChordIdx];
+                        currentChordIdx = (currentChordIdx + 1) % chords.length;
+                        
+                        // Play base drone oscillators
+                        chordNotes.forEach((freq, idx) => {
+                            const osc = this.ctx.createOscillator();
+                            const gain = this.ctx.createGain();
+                            
+                            // Alternate wave types for deep rich timbre
+                            osc.type = idx === 0 ? 'sawtooth' : 'triangle';
+                            osc.frequency.setValueAtTime(freq, now);
+                            
+                            // Low pass filter to make it deep, dark, and ambient
+                            const filter = this.ctx.createBiquadFilter();
+                            filter.type = 'lowpass';
+                            filter.frequency.setValueAtTime(idx === 0 ? 300 : 500, now);
+                            
+                            // Gentle fade in and fade out
+                            gain.gain.setValueAtTime(0, now);
+                            gain.gain.linearRampToValueAtTime(0.015, now + 1.0); // very soft ambient volume
+                            gain.gain.setValueAtTime(0.015, now + duration - 1.0);
+                            gain.gain.linearRampToValueAtTime(0, now + duration);
+                            
+                            osc.connect(filter);
+                            filter.connect(gain);
+                            gain.connect(this.ctx.destination);
+                            
+                            osc.start(now);
+                            osc.stop(now + duration);
+                            
+                            this.musicNodes.push({ osc, gain, stopTime: now + duration });
+                        });
+                        
+                        // Clean up old nodes from the list
+                        this.musicNodes = this.musicNodes.filter(item => item.stopTime > this.ctx.currentTime);
+                    };
+                    
+                    // Start sequence immediately
+                    playNextChord();
+                    this.musicInterval = setInterval(playNextChord, 4000);
+                } catch (e) {
+                    console.error("startMusic error", e);
+                }
+            }
+
+            stopMusic() {
+                try {
+                    this.musicPlaying = false;
+                    if (this.musicInterval) {
+                        clearInterval(this.musicInterval);
+                        this.musicInterval = null;
+                    }
+                    if (this.musicNodes) {
+                        this.musicNodes.forEach(item => {
+                            try {
+                                item.osc.stop();
+                            } catch (err) {}
+                        });
+                        this.musicNodes = [];
+                    }
+                } catch (e) {
+                    console.error("stopMusic error", e);
+                }
+            }
+
+            pauseMusic() {
+                this.stopMusic();
+            }
+
+            resumeMusic() {
+                if (window.AndroidGame && window.AndroidGame.isMusicEnabled()) {
+                    this.startMusic();
                 }
             }
         }
@@ -489,6 +653,7 @@
         let screenShake = 0;
         let isGameOverProcessed = false;
         let isScoreSaved = false;
+        let isGamePaused = false;
 
         // Lists
         let stars = [];
@@ -1052,8 +1217,14 @@
         // --- Game Flow Control States ---
         window.startGame = function() {
             sound.init();
+            sound.stopMusic();
+            sound.startMusic();
             sound.playPowerUp();
+            if (window.AndroidGame && window.AndroidGame.vibrate) {
+                window.AndroidGame.vibrate(30);
+            }
             gameState = 'PLAYING';
+            isGamePaused = false;
             score = 0;
             lives = 3;
             lastShotTime = performance.now();
@@ -1091,7 +1262,9 @@
         }
 
         window.showStartScreen = function() {
+            sound.stopMusic();
             gameState = 'START';
+            isGamePaused = false;
             hud.classList.add('hidden');
             gameOverScreen.classList.add('hidden');
             startScreen.classList.remove('hidden');
@@ -1102,6 +1275,14 @@
             if (isGameOverProcessed) return;
             isGameOverProcessed = true;
             gameState = 'GAMEOVER';
+            isGamePaused = false;
+            
+            sound.stopMusic();
+            sound.playGameOver();
+            if (window.AndroidGame && window.AndroidGame.vibrate) {
+                window.AndroidGame.vibrate(300);
+            }
+
             hud.classList.add('hidden');
             controlHint.style.display = 'none';
             finalScoreDisplay.textContent = score;
@@ -1120,6 +1301,27 @@
             }
         }
 
+        window.pauseGame = function() {
+            isGamePaused = true;
+            sound.pauseMusic();
+        }
+
+        window.resumeGame = function() {
+            isGamePaused = false;
+            sound.resumeMusic();
+            lastTime = performance.now();
+        }
+
+        window.updateSettings = function() {
+            if (window.AndroidGame) {
+                if (!window.AndroidGame.isMusicEnabled()) {
+                    sound.stopMusic();
+                } else if (gameState === 'PLAYING' && !isGamePaused && !sound.musicPlaying) {
+                    sound.startMusic();
+                }
+            }
+        }
+
         // UI Event Listeners
         startButton.addEventListener('click', window.startGame);
         restartButton.addEventListener('click', window.startGame);
@@ -1134,7 +1336,9 @@
 
             // Background drawings always active
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            updateStars(dt);
+            if (!isGamePaused) {
+                updateStars(dt);
+            }
             drawStars();
 
             // Handle screenshake math
@@ -1143,41 +1347,49 @@
                 const shakeX = (Math.random() * 2 - 1) * screenShake;
                 const shakeY = (Math.random() * 2 - 1) * screenShake;
                 ctx.translate(shakeX, shakeY);
-                screenShake *= 0.88; // Quick decay
+                if (!isGamePaused) {
+                    screenShake *= 0.88; // Quick decay
+                }
                 if (screenShake < 0.2) screenShake = 0;
             }
 
             if (gameState === 'PLAYING') {
-                // Update Player
-                updatePlayer(dt);
+                if (!isGamePaused) {
+                    // Update Player
+                    updatePlayer(dt);
+
+                    // Auto bullet shooter trigger
+                    if (timestamp - lastShotTime >= BULLET_COOLDOWN) {
+                        fireBullet();
+                        lastShotTime = timestamp;
+                    }
+
+                    // Spawning system based on progression (lower interval as score grows)
+                    const currentInterval = Math.max(450, SPAWN_INTERVAL_BASE - Math.floor(score / 12) * 50);
+                    if (timestamp - lastSpawnTime >= currentInterval) {
+                        enemies.push(new Enemy());
+                        lastSpawnTime = timestamp;
+                    }
+
+                    // Updates
+                    updateBullets(dt);
+                    updateEnemies(dt);
+                    checkCollisions();
+                    updateParticles(dt);
+                }
+
+                // Renderers are always drawn even if frozen, keeping current visual state
                 drawPlayer();
-
-                // Auto bullet shooter trigger
-                if (timestamp - lastShotTime >= BULLET_COOLDOWN) {
-                    fireBullet();
-                    lastShotTime = timestamp;
-                }
-
-                // Spawning system based on progression (lower interval as score grows)
-                const currentInterval = Math.max(450, SPAWN_INTERVAL_BASE - Math.floor(score / 12) * 50);
-                if (timestamp - lastSpawnTime >= currentInterval) {
-                    enemies.push(new Enemy());
-                    lastSpawnTime = timestamp;
-                }
-
-                // Updates
-                updateBullets(dt);
-                updateEnemies(dt);
-                checkCollisions();
-
-                // Renderers
                 drawBullets();
                 drawEnemies();
+                drawParticles();
+            } else {
+                // If not playing, still update particles (when unpaused)
+                if (!isGamePaused) {
+                    updateParticles(dt);
+                }
+                drawParticles();
             }
-
-            // Always update particles for continuous visual fade outs
-            updateParticles(dt);
-            drawParticles();
 
             if (screenShake > 0) {
                 ctx.restore();
