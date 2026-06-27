@@ -263,6 +263,55 @@
             0%, 100% { opacity: 0.3; }
             50% { opacity: 0.8; }
         }
+
+        /* Boss HP Bar Overlays */
+        #boss-hud {
+            position: absolute;
+            top: 75px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 85%;
+            max-width: 420px;
+            background: rgba(12, 5, 25, 0.75);
+            border: 2.2px solid #ff0055;
+            box-shadow: 0 0 15px rgba(255, 0, 85, 0.4);
+            border-radius: 8px;
+            padding: 10px 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            z-index: 6;
+            transition: opacity 0.3s ease;
+        }
+        #boss-hud.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .boss-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.85rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: #ff0055;
+            text-shadow: 0 0 6px rgba(255, 0, 85, 0.5);
+        }
+        .boss-hp-bar {
+            width: 100%;
+            height: 9px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 0, 85, 0.3);
+        }
+        .boss-hp-fill {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #ff0055, #ff5500);
+            transition: width 0.1s linear;
+        }
     </style>
 </head>
 <body>
@@ -270,6 +319,10 @@
     <div id="game-container">
         <!-- HUD -->
         <div id="hud" class="hidden">
+            <div class="hud-item">
+                <span class="hud-label">Sector</span>
+                <span id="level-display" class="hud-val">1</span>
+            </div>
             <div class="hud-item">
                 <span class="hud-label">Score</span>
                 <span id="score-display" class="hud-val">00000</span>
@@ -285,9 +338,24 @@
                     <svg class="life-heart lost" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
                 </div>
             </div>
+            <div class="hud-item" style="align-items: center;">
+                <span class="hud-label">Coins</span>
+                <span id="coins-display" class="hud-val" style="color: #ffd700; text-shadow: 0 0 8px rgba(255, 215, 0, 0.6);">0000</span>
+            </div>
             <div class="hud-item" style="align-items: flex-end;">
                 <span class="hud-label">Best</span>
                 <span id="high-score-display" class="hud-val">00000</span>
+            </div>
+        </div>
+
+        <!-- Boss Health Bar HUD -->
+        <div id="boss-hud" class="hidden">
+            <div class="boss-info">
+                <span id="boss-name">Sector Guardian</span>
+                <span id="boss-hp-text">100%</span>
+            </div>
+            <div class="boss-hp-bar">
+                <div id="boss-health-fill" class="boss-hp-fill"></div>
             </div>
         </div>
 
@@ -303,6 +371,29 @@
                     </div>
                 </div>
                 <button id="start-button" class="btn-cyber">Launch Mission</button>
+            </div>
+        </div>
+
+        <!-- Level Complete Screen -->
+        <div id="level-complete-screen" class="overlay hidden">
+            <div class="glass-panel">
+                <h1 style="background: linear-gradient(45deg, #00ffaa, #00f0ff); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Sector Secured</h1>
+                <p id="level-complete-subtitle" class="subtitle" style="color: #a0ffdd;">Sector Secured Successfully</p>
+                <div class="stats-box">
+                    <div class="stat-row">
+                        <span class="stat-label">Sector Bonus Points</span>
+                        <span id="level-bonus-points" class="stat-value" style="color: #00ffaa;">+100</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Sector Coins Found</span>
+                        <span id="level-bonus-coins" class="stat-value" style="color: #ffd700;">+10</span>
+                    </div>
+                    <div class="stat-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+                        <span class="stat-label">Total Coins</span>
+                        <span id="level-total-coins" class="stat-value" style="color: #ffd700;">0000</span>
+                    </div>
+                </div>
+                <button id="next-level-button" class="btn-cyber" style="border-color: #00ffaa; box-shadow: 0 0 15px rgba(0, 255, 170, 0.2);">Next Sector</button>
             </div>
         </div>
 
@@ -640,11 +731,29 @@
         const hud = document.getElementById('hud');
         const controlHint = document.getElementById('control-hint');
         const hearts = document.querySelectorAll('.life-heart');
+        const coinsDisplay = document.getElementById('coins-display');
+        const levelDisplay = document.getElementById('level-display');
+        const levelCompleteScreen = document.getElementById('level-complete-screen');
+        const bossHud = document.getElementById('boss-hud');
 
         // Configurable Parameters
         const SPAWN_INTERVAL_BASE = 1200; // Starting spawns in ms
         const BULLET_COOLDOWN = 300;     // Shooting frequency
         const STAR_COUNT = 100;
+
+        // --- 10 Level Definitions ---
+        const LEVELS = {
+            1: { name: "Nebula Outpost", targetKills: 35, spawnRate: 1600, speeds: 1.0, boss: false },
+            2: { name: "Asteroid Field", targetKills: 45, spawnRate: 1400, speeds: 1.2, boss: false },
+            3: { name: "Plasma Storm", targetKills: 55, spawnRate: 1250, speeds: 1.4, boss: false },
+            4: { name: "Elite Sector", targetKills: 65, spawnRate: 1100, speeds: 1.6, boss: false },
+            5: { name: "Krell Dreadnought", targetKills: 40, spawnRate: 1000, speeds: 1.8, boss: 'Krell Dreadnought' },
+            6: { name: "Deep Space Void", targetKills: 60, spawnRate: 1100, speeds: 2.0, boss: false },
+            7: { name: "Comet Belt", targetKills: 70, spawnRate: 1000, speeds: 2.2, boss: false },
+            8: { name: "Hyperdrive Lane", targetKills: 80, spawnRate: 900, speeds: 2.4, boss: false },
+            9: { name: "Warp Sector Gamma", targetKills: 95, spawnRate: 800, speeds: 2.6, boss: false },
+            10: { name: "Devastator Core", targetKills: 50, spawnRate: 700, speeds: 2.8, boss: 'Devastator Star' }
+        };
 
         // Game State Variables
         let gameState = 'START'; // 'START' | 'PLAYING' | 'GAMEOVER'
@@ -659,9 +768,22 @@
         let isScoreSaved = false;
         let isGamePaused = false;
 
+        // Progression & Coin Variables
+        let currentLevel = 1;
+        let levelKills = 0;
+        let targetKills = 35;
+        let totalCoins = 0;
+        let runCoins = 0;
+        let levelState = 'PLAYING'; // 'PLAYING' | 'BOSS_INCOMING' | 'BOSS_FIGHT' | 'COMPLETED'
+        let activeBoss = null;
+        let bossIncomingTimer = 0;
+        let bossDestructionTimer = 0;
+        let bossExplosionTimer = 0;
+
         // Lists
         let stars = [];
         let bullets = [];
+        let enemyBullets = [];
         let enemies = [];
         let powerups = [];
 
@@ -679,7 +801,10 @@
             pulseSize: 0,
             power: 1,
             hasRapidFire: false,
-            rapidFireTime: 0
+            rapidFireTime: 0,
+            hasShield: false,
+            shootType: 'normal', // 'normal' | 'double' | 'triple'
+            powerupTime: 0
         };
 
         // Screen Size Adaptation
@@ -1072,13 +1197,51 @@
             }
         }
 
+        // --- Enemy Projectiles ---
+        class EnemyBullet {
+            constructor() {
+                this.active = false;
+                this.x = 0;
+                this.y = 0;
+                this.vx = 0;
+                this.vy = 0;
+                this.size = 5;
+                this.color = '#ff0055';
+            }
+            init(x, y, vx, vy) {
+                this.active = true;
+                this.x = x;
+                this.y = y;
+                this.vx = vx;
+                this.vy = vy;
+                this.size = 5;
+                this.color = '#ff0055';
+            }
+            update(dt) {
+                const modifier = dt / 16.66;
+                this.x += this.vx * modifier;
+                this.y += this.vy * modifier;
+                return (this.y > canvas.height + 10 || this.y < -10 || this.x < -10 || this.x > canvas.width + 10);
+            }
+            draw() {
+                ctx.save();
+                ctx.strokeStyle = this.color;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x + this.vx * 1.5, this.y + this.vy * 1.5);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
+
         // --- Collectibles (Powerups) ---
         class PowerUp {
             constructor() {
                 this.active = false;
                 this.x = 0;
                 this.y = 0;
-                this.type = ''; // 'rapid', 'life'
+                this.type = ''; // 'rapid', 'life', 'shield', 'double', 'triple', 'coin'
                 this.size = 24;
                 this.vy = 2.2;
                 this.pulse = 0;
@@ -1106,8 +1269,21 @@
                 } else if (this.type === 'life') {
                     color = '#ff3333';
                     label = 'L';
+                } else if (this.type === 'shield') {
+                    color = '#00f0ff';
+                    label = 'S';
+                } else if (this.type === 'double') {
+                    color = '#ffd700';
+                    label = '2';
+                } else if (this.type === 'triple') {
+                    color = '#e000ff';
+                    label = '3';
+                } else if (this.type === 'coin') {
+                    color = '#ffcc00';
+                    label = '🪙';
                 }
 
+                ctx.save();
                 ctx.strokeStyle = color;
                 ctx.fillStyle = 'rgba(10, 15, 30, 0.85)';
                 ctx.lineWidth = 2.5;
@@ -1121,7 +1297,12 @@
                 ctx.font = 'bold 12px monospace';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                ctx.fillText(label, this.x, this.y);
+                if (this.type === 'coin') {
+                    ctx.fillText(label, this.x, this.y);
+                } else {
+                    ctx.fillText(label, this.x, this.y);
+                }
+                ctx.restore();
             }
         }
 
@@ -1137,25 +1318,116 @@
                 this.color = '';
                 this.scoreVal = 0;
                 this.hp = 0;
+                this.type = 'striker';
+                this.shootCooldown = 0;
+                this.angle = 0;
+                this.sineDir = 1;
             }
 
             init() {
                 this.active = true;
-                this.width = Math.random() * 12 + 25; // 25px - 37px
+                const types = ['striker', 'weaver', 'zigzagger', 'hunter', 'kamikaze', 'elite', 'meteor'];
+                // Choose type based on current unlocked levels
+                let choicePool = ['striker'];
+                if (currentLevel >= 2) choicePool.push('weaver');
+                if (currentLevel >= 3) choicePool.push('zigzagger', 'meteor');
+                if (currentLevel >= 4) choicePool.push('hunter', 'elite');
+                if (currentLevel >= 6) choicePool.push('kamikaze');
+                
+                this.type = choicePool[Math.floor(Math.random() * choicePool.length)];
+                this.shootCooldown = Math.random() * 2000 + 1000;
+                this.angle = Math.random() * Math.PI;
+
+                const lvlSpeedMult = LEVELS[currentLevel]?.speeds || 1.0;
+
+                if (this.type === 'striker') {
+                    this.width = Math.random() * 8 + 26;
+                    this.height = this.width;
+                    this.hp = 1;
+                    this.scoreVal = 10;
+                    this.color = '#ff0055';
+                    this.speed = (Math.random() * 1.5 + 1.2) * lvlSpeedMult;
+                    this.x = Math.random() * (canvas.width - 60) + 30;
+                } else if (this.type === 'weaver') {
+                    this.width = 30;
+                    this.height = 30;
+                    this.hp = 1.5;
+                    this.scoreVal = 15;
+                    this.color = '#00ffaa';
+                    this.speed = (Math.random() * 1.0 + 1.0) * lvlSpeedMult;
+                    this.x = Math.random() * (canvas.width - 100) + 50;
+                    this.sineDir = Math.random() < 0.5 ? 1 : -1;
+                } else if (this.type === 'zigzagger') {
+                    this.width = 28;
+                    this.height = 28;
+                    this.hp = 1;
+                    this.scoreVal = 20;
+                    this.color = '#ffaa00';
+                    this.speed = (Math.random() * 1.3 + 1.5) * lvlSpeedMult;
+                    this.x = Math.random() * (canvas.width - 80) + 40;
+                    this.vx = Math.random() < 0.5 ? -2 : 2;
+                } else if (this.type === 'hunter') {
+                    this.width = 32;
+                    this.height = 32;
+                    this.hp = 2;
+                    this.scoreVal = 25;
+                    this.color = '#ff00ff';
+                    this.speed = (Math.random() * 0.8 + 0.8) * lvlSpeedMult;
+                    this.x = Math.random() * (canvas.width - 60) + 30;
+                } else if (this.type === 'kamikaze') {
+                    this.width = 24;
+                    this.height = 24;
+                    this.hp = 1;
+                    this.scoreVal = 30;
+                    this.color = '#ff5500';
+                    this.speed = (Math.random() * 1.8 + 2.5) * lvlSpeedMult;
+                    this.x = Math.random() * (canvas.width - 60) + 30;
+                } else if (this.type === 'elite') {
+                    this.width = 36;
+                    this.height = 36;
+                    this.hp = 3;
+                    this.scoreVal = 40;
+                    this.color = '#ffff00';
+                    this.speed = (Math.random() * 0.6 + 0.7) * lvlSpeedMult;
+                    this.x = Math.random() * (canvas.width - 80) + 40;
+                } else if (this.type === 'meteor') {
+                    this.width = Math.random() * 20 + 40; // massive size 40-60px
+                    this.height = this.width;
+                    this.hp = 5;
+                    this.scoreVal = 50;
+                    this.color = '#8e8e8e';
+                    this.speed = (Math.random() * 0.5 + 0.6) * lvlSpeedMult;
+                    this.x = Math.random() * (canvas.width - 100) + 50;
+                }
                 this.height = this.width;
-                this.x = Math.random() * (canvas.width - 40) + 20;
                 this.y = -this.height;
-                this.hp = 1;
-                this.scoreVal = 10;
-                this.color = '#ff003c';
-                this.speed = Math.random() * 1.5 + 1.2;
             }
 
             update(dt) {
                 const modifier = dt / 16.66;
                 this.y += this.speed * modifier;
 
-                // Keep inside screen bounds horizontally
+                if (this.type === 'weaver') {
+                    this.x += Math.sin(this.y * 0.05) * 2.5 * this.sineDir * modifier;
+                } else if (this.type === 'zigzagger') {
+                    this.x += this.vx * modifier;
+                    if (this.x < this.width || this.x > canvas.width - this.width) {
+                        this.vx = -this.vx;
+                    }
+                } else if (this.type === 'hunter') {
+                    // Slowly drift horizontally towards player
+                    const dx = player.x - this.x;
+                    this.x += Math.sign(dx) * 1.2 * modifier;
+                } else if (this.type === 'elite') {
+                    // Shoot projectile straight down
+                    this.shootCooldown -= dt;
+                    if (this.shootCooldown <= 0) {
+                        this.shootCooldown = 2200 + Math.random() * 1000;
+                        spawnEnemyBullet(this.x, this.y + this.height / 2, 0, 4.5);
+                    }
+                }
+
+                // Horizontal bounds checking
                 const r = this.width / 2;
                 if (this.x < r) this.x = r;
                 if (this.x > canvas.width - r) this.x = canvas.width - r;
@@ -1164,19 +1436,168 @@
             }
 
             draw() {
+                ctx.save();
                 ctx.strokeStyle = this.color;
-                ctx.fillStyle = 'rgba(12, 4, 15, 0.7)';
+                ctx.fillStyle = 'rgba(12, 4, 15, 0.75)';
                 ctx.lineWidth = 2.5;
 
-                ctx.beginPath();
                 const r = this.width / 2;
-                ctx.moveTo(this.x, this.y + r); // bottom apex (moving down)
-                ctx.lineTo(this.x - r, this.y - r); // top-left wing
-                ctx.lineTo(this.x, this.y - r / 2); // center rear
-                ctx.lineTo(this.x + r, this.y - r); // top-right wing
+
+                if (this.type === 'meteor') {
+                    // Draw a jagged polygon rock shape
+                    ctx.beginPath();
+                    for (let i = 0; i < 8; i++) {
+                        const angle = (i / 8) * Math.PI * 2;
+                        const dist = r * (0.85 + Math.sin(angle * 3) * 0.15);
+                        const px = this.x + Math.cos(angle) * dist;
+                        const py = this.y + Math.sin(angle) * dist;
+                        if (i === 0) ctx.moveTo(px, py);
+                        else ctx.lineTo(px, py);
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                } else if (this.type === 'elite') {
+                    // Futuristic hex star
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y - r);
+                    ctx.lineTo(this.x - r, this.y - r / 2);
+                    ctx.lineTo(this.x - r / 2, this.y + r / 2);
+                    ctx.lineTo(this.x - r, this.y + r);
+                    ctx.lineTo(this.x, this.y + r / 2);
+                    ctx.lineTo(this.x + r, this.y + r);
+                    ctx.lineTo(this.x + r / 2, this.y + r / 2);
+                    ctx.lineTo(this.x + r, this.y - r / 2);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                } else if (this.type === 'kamikaze') {
+                    // Sleek sharp delta wing
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y + r);
+                    ctx.lineTo(this.x - r, this.y - r);
+                    ctx.lineTo(this.x, this.y - r / 3);
+                    ctx.lineTo(this.x + r, this.y - r);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                } else {
+                    // Classic alien striker/weaver wing style
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y + r); // bottom apex
+                    ctx.lineTo(this.x - r, this.y - r); // top left
+                    ctx.lineTo(this.x, this.y - r / 2); // center rear
+                    ctx.lineTo(this.x + r, this.y - r); // top right
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+        }
+
+        // --- Boss Battle Logic Class ---
+        class Boss {
+            constructor(name, maxHp) {
+                this.active = true;
+                this.name = name;
+                this.hp = maxHp;
+                this.maxHp = maxHp;
+                this.x = canvas.width / 2;
+                this.y = -120;
+                this.targetY = 140;
+                this.width = 140;
+                this.height = 90;
+                this.speed = 1.6;
+                this.dx = 1.5;
+                this.shootCooldown = 1500;
+                this.laserBarrageTimer = 0;
+                this.phase = 1;
+            }
+
+            update(dt) {
+                const modifier = dt / 16.66;
+                // Entry move down onto screen
+                if (this.y < this.targetY) {
+                    this.y += 1.8 * modifier;
+                    return;
+                }
+
+                // Horizontal oscillation sweep
+                this.x += this.dx * this.speed * modifier;
+                if (this.x < 100 || this.x > canvas.width - 100) {
+                    this.dx = -this.dx;
+                }
+
+                // Firing logic
+                this.shootCooldown -= dt;
+                if (this.shootCooldown <= 0) {
+                    this.shootCooldown = this.name.includes("Devastator") ? 900 : 1400;
+                    this.firePattern();
+                }
+
+                // Phase transition at 50% HP
+                if (this.phase === 1 && this.hp < this.maxHp / 2) {
+                    this.phase = 2;
+                    this.speed *= 1.4;
+                }
+            }
+
+            firePattern() {
+                if (this.name.includes("Devastator")) {
+                    // Devastator Core: radial blast pattern
+                    const bulletCount = 12;
+                    for (let i = 0; i < bulletCount; i++) {
+                        const angle = (i / bulletCount) * Math.PI * 2;
+                        spawnEnemyBullet(this.x, this.y + 20, Math.cos(angle) * 3.5, Math.sin(angle) * 3.5);
+                    }
+                    // Aimed target burst
+                    const dx = player.x - this.x;
+                    const dy = player.y - this.y;
+                    const dist = Math.hypot(dx, dy);
+                    spawnEnemyBullet(this.x, this.y + 20, (dx / dist) * 5.5, (dy / dist) * 5.5);
+                } else {
+                    // Krell Dreadnought: multi-laser spread
+                    spawnEnemyBullet(this.x - 45, this.y + 25, -1.2, 4.2);
+                    spawnEnemyBullet(this.x, this.y + 35, 0, 4.8);
+                    spawnEnemyBullet(this.x + 45, this.y + 25, 1.2, 4.2);
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.strokeStyle = '#ff0055';
+                ctx.fillStyle = '#0f051a';
+                ctx.lineWidth = 3.5;
+
+                // Draw central command bridge core
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 35, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Draw huge multi-wing spans
+                ctx.beginPath();
+                ctx.moveTo(this.x - 30, this.y);
+                ctx.lineTo(this.x - 85, this.y - 20);
+                ctx.lineTo(this.x - 95, this.y + 25);
+                ctx.lineTo(this.x - 40, this.y + 35);
+                ctx.lineTo(this.x, this.y + 45);
+                ctx.lineTo(this.x + 40, this.y + 35);
+                ctx.lineTo(this.x + 95, this.y + 25);
+                ctx.lineTo(this.x + 85, this.y - 20);
+                ctx.lineTo(this.x + 30, this.y);
                 ctx.closePath();
                 ctx.fill();
                 ctx.stroke();
+
+                // Draw glowing core battery charge
+                ctx.fillStyle = this.phase === 1 ? '#ff003c' : '#ffaa00';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y + 10, 14 + Math.sin(performance.now() * 0.01) * 3, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
             }
         }
 
@@ -1337,15 +1758,65 @@
                             score += enemy.scoreVal;
                             scoreDisplay.textContent = String(score).padStart(5, '0');
                             
-                            // Powerups drop physics (10% chance)
-                            if (Math.random() < 0.10) {
-                                const chosen = Math.random() < 0.5 ? 'rapid' : 'life';
+                            // Progression Check (Normal playing state progression)
+                            if (levelState === 'PLAYING') {
+                                levelKills++;
+                                if (levelKills >= targetKills) {
+                                    const lvlBoss = LEVELS[currentLevel]?.boss;
+                                    if (lvlBoss) {
+                                        levelState = 'BOSS_INCOMING';
+                                        bossIncomingTimer = 3000; // 3 seconds of red pulsating warning
+                                        sound.playGameOver(); // warning sound
+                                    } else {
+                                        levelSecured();
+                                    }
+                                }
+                            }
+                            
+                            // Powerups drop physics (18% chance)
+                            if (Math.random() < 0.18) {
+                                const roll = Math.random();
+                                let chosen = 'coin';
+                                if (roll < 0.25) chosen = 'coin';
+                                else if (roll < 0.40) chosen = 'rapid';
+                                else if (roll < 0.55) chosen = 'shield';
+                                else if (roll < 0.70) chosen = 'double';
+                                else if (roll < 0.85) chosen = 'triple';
+                                else chosen = 'life';
                                 spawnPowerUp(enemy.x, enemy.y, chosen);
                             }
                         } else {
                             spawnExplosion(bullet.x, bullet.y, '#ffffff', 3);
                         }
                         break;
+                    }
+                }
+            }
+
+            // 1B. Bullets vs Active Boss
+            if (levelState === 'BOSS_FIGHT' && activeBoss && activeBoss.hp > 0) {
+                for (let bIdx = 0; bIdx < bullets.length; bIdx++) {
+                    const bullet = bullets[bIdx];
+                    if (!bullet.active) continue;
+
+                    const dist = Math.hypot(bullet.x - activeBoss.x, bullet.y - activeBoss.y);
+                    const collisionDist = (activeBoss.width / 2.2) + bullet.size;
+
+                    if (dist < collisionDist) {
+                        bullet.active = false;
+                        activeBoss.hp--;
+                        sound.playHurt();
+
+                        // Update Boss HUD display
+                        const percent = Math.max(0, Math.floor((activeBoss.hp / activeBoss.maxHp) * 100));
+                        document.getElementById('boss-health-fill').style.width = `${percent}%`;
+                        document.getElementById('boss-hp-text').textContent = `${percent}%`;
+
+                        if (activeBoss.hp <= 0) {
+                            bossDefeated();
+                        } else {
+                            spawnExplosion(bullet.x, bullet.y, '#ffffff', 3);
+                        }
                     }
                 }
             }
@@ -1371,6 +1842,45 @@
                     } else if (pu.type === 'rapid') {
                         player.hasRapidFire = true;
                         player.rapidFireTime = 8000;
+                    } else if (pu.type === 'shield') {
+                        player.hasShield = true;
+                    } else if (pu.type === 'double') {
+                        player.shootType = 'double';
+                        player.powerupTime = 12000;
+                    } else if (pu.type === 'triple') {
+                        player.shootType = 'triple';
+                        player.powerupTime = 10000;
+                    } else if (pu.type === 'coin') {
+                        runCoins++;
+                        totalCoins++;
+                        updateCoinsHUD();
+                        if (window.AndroidGame && typeof window.AndroidGame.saveTotalCoins === 'function') {
+                            window.AndroidGame.saveTotalCoins(totalCoins);
+                        }
+                    }
+                }
+            }
+
+            // 2B. Enemy lasers vs Player Ship
+            if (player.invulnFrames <= 0) {
+                for (let ebIdx = 0; ebIdx < enemyBullets.length; ebIdx++) {
+                    const eb = enemyBullets[ebIdx];
+                    if (!eb.active) continue;
+
+                    const dist = Math.hypot(player.x - eb.x, player.y - eb.y);
+                    const playerRadius = player.width * 0.35;
+
+                    if (dist < playerRadius + eb.size) {
+                        eb.active = false;
+                        if (player.hasShield) {
+                            player.hasShield = false;
+                            player.invulnFrames = 600; // brief protection after shield break
+                            sound.playHurt();
+                            screenShake = 8;
+                            spawnExplosion(player.x, player.y, '#00f0ff', 12);
+                        } else {
+                            applyPlayerDamage();
+                        }
                     }
                 }
             }
@@ -1387,8 +1897,35 @@
 
                     if (dist < playerRadius + enemyRadius) {
                         enemy.active = false;
-                        applyPlayerDamage();
+                        if (player.hasShield) {
+                            player.hasShield = false;
+                            player.invulnFrames = 600;
+                            sound.playHurt();
+                            screenShake = 8;
+                            spawnExplosion(player.x, player.y, '#00f0ff', 12);
+                        } else {
+                            applyPlayerDamage();
+                        }
                         break;
+                    }
+                }
+            }
+
+            // 3B. Boss vs Player Ship
+            if (player.invulnFrames <= 0 && levelState === 'BOSS_FIGHT' && activeBoss) {
+                const dist = Math.hypot(player.x - activeBoss.x, player.y - activeBoss.y);
+                const playerRadius = player.width * 0.38;
+                const bossRadius = activeBoss.width * 0.45;
+
+                if (dist < playerRadius + bossRadius) {
+                    if (player.hasShield) {
+                        player.hasShield = false;
+                        player.invulnFrames = 600;
+                        sound.playHurt();
+                        screenShake = 12;
+                        spawnExplosion(player.x, player.y, '#00f0ff', 12);
+                    } else {
+                        applyPlayerDamage();
                     }
                 }
             }
@@ -1421,8 +1958,60 @@
             });
         }
 
+        function updateCoinsHUD() {
+            coinsDisplay.textContent = String(totalCoins).padStart(4, '0');
+        }
+
+        function bossDefeated() {
+            levelState = 'BOSS_DESTRUCTION';
+            bossDestructionTimer = 1800; // 1.8s explosion sequence
+            bossExplosionTimer = 0;
+            score += 1000;
+            scoreDisplay.textContent = String(score).padStart(5, '0');
+            sound.playGameOver();
+        }
+
+        function levelSecured() {
+            gameState = 'LEVEL_COMPLETE';
+            sound.stopMusic();
+            sound.playPowerUp();
+
+            const nextLvl = currentLevel + 1;
+            if (window.AndroidGame && typeof window.AndroidGame.getHighestLevel === 'function') {
+                const currentHighest = window.AndroidGame.getHighestLevel();
+                if (nextLvl > currentHighest) {
+                    window.AndroidGame.saveHighestLevel(nextLvl);
+                }
+            }
+
+            const bonusPoints = currentLevel * 100;
+            const bonusCoins = currentLevel * 5;
+
+            score += bonusPoints;
+            totalCoins += bonusCoins;
+            runCoins += bonusCoins;
+
+            scoreDisplay.textContent = String(score).padStart(5, '0');
+            updateCoinsHUD();
+
+            if (window.AndroidGame && typeof window.AndroidGame.saveTotalCoins === 'function') {
+                window.AndroidGame.saveTotalCoins(totalCoins);
+            }
+
+            // Setup level complete HUD
+            document.getElementById('level-complete-subtitle').textContent = `Sector ${currentLevel} Secured Successfully`;
+            document.getElementById('level-bonus-points').textContent = `+${bonusPoints}`;
+            document.getElementById('level-bonus-coins').textContent = `+${bonusCoins}`;
+            document.getElementById('level-total-coins').textContent = String(totalCoins).padStart(4, '0');
+
+            levelCompleteScreen.classList.remove('hidden');
+            hud.classList.add('hidden');
+            bossHud.classList.add('hidden');
+            controlHint.style.display = 'none';
+        }
+
         // --- Game Flow Control States ---
-        window.startGame = function() {
+        window.startGame = function(levelNum) {
             sound.init();
             sound.stopMusic();
             sound.startMusic();
@@ -1430,11 +2019,30 @@
             if (window.AndroidGame && window.AndroidGame.vibrate) {
                 window.AndroidGame.vibrate(30);
             }
-            
+
+            // Read / Sync save states
+            if (window.AndroidGame) {
+                try {
+                    if (typeof window.AndroidGame.getTotalCoins === 'function') {
+                        totalCoins = window.AndroidGame.getTotalCoins();
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+
             gameState = 'PLAYING';
             isGamePaused = false;
             score = 0;
             spawnInterval = SPAWN_INTERVAL_BASE;
+
+            currentLevel = levelNum || 1;
+            levelKills = 0;
+            targetKills = LEVELS[currentLevel]?.targetKills || 35;
+            levelState = 'PLAYING';
+            activeBoss = null;
+            bossIncomingTimer = 0;
+            runCoins = 0;
             
             // Reset player states
             player.x = canvas.width / 2;
@@ -1444,12 +2052,17 @@
             player.invulnFrames = 0;
             player.hasRapidFire = false;
             player.rapidFireTime = 0;
+            player.hasShield = false;
+            player.shootType = 'normal';
+            player.powerupTime = 0;
             
             lives = 3;
             bullets = [];
+            enemyBullets = [];
             enemies = [];
             powerups = [];
             bulletPool.forEach(b => b.active = false);
+            enemyBulletPool.forEach(eb => eb.active = false);
             enemyPool.forEach(e => e.active = false);
             powerUpPool.forEach(p => p.active = false);
             particlePool.forEach(p => p.active = false);
@@ -1463,10 +2076,14 @@
             
             // Update HUD text displays
             scoreDisplay.textContent = String(score).padStart(5, '0');
+            levelDisplay.textContent = currentLevel;
             updateLivesHUD();
+            updateCoinsHUD();
             
             startScreen.classList.add('hidden');
             gameOverScreen.classList.add('hidden');
+            levelCompleteScreen.classList.add('hidden');
+            bossHud.classList.add('hidden');
             hud.classList.remove('hidden');
             controlHint.style.display = 'block';
             
@@ -1485,6 +2102,8 @@
             isGamePaused = false;
             hud.classList.add('hidden');
             gameOverScreen.classList.add('hidden');
+            levelCompleteScreen.classList.add('hidden');
+            bossHud.classList.add('hidden');
             startScreen.classList.remove('hidden');
             controlHint.style.display = 'block';
         }
@@ -1502,6 +2121,7 @@
             }
 
             hud.classList.add('hidden');
+            bossHud.classList.add('hidden');
             controlHint.style.display = 'none';
             finalScoreDisplay.textContent = score;
             
@@ -1541,8 +2161,27 @@
         }
 
         // UI Event Listeners
-        startButton.addEventListener('click', () => { window.startGame(); });
-        restartButton.addEventListener('click', () => { window.startGame(); });
+        startButton.addEventListener('click', () => { window.startGame(1); });
+        restartButton.addEventListener('click', () => { window.startGame(currentLevel); });
+        
+        const nextLevelButton = document.getElementById('next-level-button');
+        nextLevelButton.addEventListener('click', () => {
+            levelCompleteScreen.classList.add('hidden');
+            const nextLvl = currentLevel + 1;
+            if (nextLvl <= 10) {
+                window.startGame(nextLvl);
+            } else {
+                try {
+                    if (window.AndroidGame && typeof window.AndroidGame.returnToMenu === 'function') {
+                        window.AndroidGame.returnToMenu();
+                    } else {
+                        window.showStartScreen();
+                    }
+                } catch (e) {
+                    window.showStartScreen();
+                }
+            }
+        });
 
         // --- Main Animation Frame Loop ---
         function gameLoop(timestamp) {
@@ -1579,6 +2218,12 @@
                             player.hasRapidFire = false;
                         }
                     }
+                    if (player.powerupTime > 0) {
+                        player.powerupTime -= dt;
+                        if (player.powerupTime <= 0) {
+                            player.shootType = 'normal';
+                        }
+                    }
 
                     // Update Player Ship position
                     updatePlayer(dt);
@@ -1590,11 +2235,42 @@
                         lastShotTime = timestamp;
                     }
 
-                    // Progressive survival spawn speed (faster spawns as score increases)
-                    spawnInterval = Math.max(450, SPAWN_INTERVAL_BASE - Math.floor(score / 15) * 50);
-                    if (timestamp - lastSpawnTime >= spawnInterval) {
-                        spawnEnemy();
-                        lastSpawnTime = timestamp;
+                    // Handle boss progression and spawns
+                    if (levelState === 'BOSS_INCOMING') {
+                        bossIncomingTimer -= dt;
+                        if (bossIncomingTimer <= 0) {
+                            levelState = 'BOSS_FIGHT';
+                            const bMaxHp = currentLevel === 5 ? 50 : 100;
+                            activeBoss = new Boss(LEVELS[currentLevel].boss, bMaxHp);
+                            bossHud.classList.remove('hidden');
+                            document.getElementById('boss-name').textContent = activeBoss.name;
+                            document.getElementById('boss-health-fill').style.width = '100%';
+                            document.getElementById('boss-hp-text').textContent = '100%';
+                        }
+                    } else if (levelState === 'BOSS_FIGHT' && activeBoss) {
+                        activeBoss.update(dt);
+                    } else if (levelState === 'BOSS_DESTRUCTION') {
+                        bossDestructionTimer -= dt;
+                        bossExplosionTimer += dt;
+                        if (bossExplosionTimer >= 100) {
+                            bossExplosionTimer = 0;
+                            spawnExplosion(
+                                activeBoss.x + (Math.random() * 100 - 50),
+                                activeBoss.y + (Math.random() * 60 - 30),
+                                '#ff0055',
+                                12
+                            );
+                        }
+                        if (bossDestructionTimer <= 0) {
+                            activeBoss = null;
+                            levelSecured();
+                        }
+                    } else if (levelState === 'PLAYING') {
+                        const currentRate = LEVELS[currentLevel]?.spawnRate || SPAWN_INTERVAL_BASE;
+                        if (timestamp - lastSpawnTime >= currentRate) {
+                            spawnEnemy();
+                            lastSpawnTime = timestamp;
+                        }
                     }
 
                     // Update physics systems
@@ -1628,6 +2304,31 @@
                 }
 
                 drawEnemies();
+
+                // Draw enemy lasers
+                for (let i = 0; i < enemyBullets.length; i++) {
+                    const eb = enemyBullets[i];
+                    if (eb.active && eb.y > -20 && eb.y < canvas.height + 20) {
+                        eb.draw();
+                    }
+                }
+
+                // Draw Boss
+                if (activeBoss && (levelState === 'BOSS_FIGHT' || levelState === 'BOSS_DESTRUCTION')) {
+                    activeBoss.draw();
+                }
+
+                // Draw Warning Pulsate Text
+                if (levelState === 'BOSS_INCOMING') {
+                    ctx.save();
+                    ctx.fillStyle = `rgba(255, 0, 85, ${0.4 + Math.sin(timestamp * 0.015) * 0.45})`;
+                    ctx.font = 'bold 24px monospace';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText("⚠️ CRITICAL WARNING: SECTOR GUARDIAN INCOMING ⚠️", canvas.width / 2, canvas.height / 2.6);
+                    ctx.restore();
+                }
+
                 drawParticles();
             } else {
                 // Not actively playing, particles still render and updates on unpaused states
@@ -1652,6 +2353,12 @@
         if (window.AndroidGame) {
             startScreen.style.display = 'none';
             gameOverScreen.style.display = 'none';
+        }
+        
+        // Sync coin saves initially
+        if (window.AndroidGame && typeof window.AndroidGame.getTotalCoins === 'function') {
+            totalCoins = window.AndroidGame.getTotalCoins();
+            updateCoinsHUD();
         }
     </script>
 </body>
