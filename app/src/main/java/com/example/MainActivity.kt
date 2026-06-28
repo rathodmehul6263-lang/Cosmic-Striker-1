@@ -42,6 +42,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.animation.core.*
+import androidx.compose.animation.*
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.clip
 import com.example.ui.theme.MyApplicationTheme
 import java.text.SimpleDateFormat
 import java.util.*
@@ -123,7 +134,12 @@ class MainActivity : ComponentActivity() {
 
     fun vibratePhone(durationMs: Long) {
         if (!vibrationEnabledState) return
-        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        val targetContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            createAttributionContext("default")
+        } else {
+            this
+        }
+        val vibrator = targetContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         if (vibrator != null && vibrator.hasVibrator()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
@@ -235,6 +251,13 @@ class MainActivity : ComponentActivity() {
                                     onSettingsClick = {
                                         playClickSound()
                                         showSettingsDialog = true
+                                    },
+                                    soundEnabled = soundEffectsEnabledState && musicEnabledState,
+                                    onSoundToggled = { enabled ->
+                                        setSoundEffectsEnabled(enabled)
+                                        setMusicEnabled(enabled)
+                                        setVibrationEnabled(enabled)
+                                        playClickSound()
                                     }
                                 )
                             }
@@ -488,155 +511,363 @@ class GameInterface(
     }
 }
 
+// --- Support Classes and Composable Assets for Premium Menu ---
+
+data class StarData(
+    val xPercent: Float,
+    val yPercent: Float,
+    val size: Float,
+    val speed: Float,
+    val alpha: Float
+)
+
+data class NebulaData(
+    val xPercent: Float,
+    val yPercent: Float,
+    val radius: Float,
+    val color: Color
+)
+
 @Composable
-fun MainMenuOverlay(
+fun StarfieldBackground(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "Starfield")
+    val progress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(25000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "StarProgress"
+    )
+
+    val starsList = remember {
+        List(80) {
+            StarData(
+                xPercent = Math.random().toFloat(),
+                yPercent = Math.random().toFloat(),
+                size = (Math.random() * 2.5 + 1).toFloat(),
+                speed = (Math.random() * 0.4 + 0.1).toFloat(),
+                alpha = (Math.random() * 0.5 + 0.5).toFloat()
+            )
+        }
+    }
+
+    val nebulaeList = remember {
+        List(4) {
+            NebulaData(
+                xPercent = Math.random().toFloat(),
+                yPercent = Math.random().toFloat(),
+                radius = (Math.random() * 150 + 100).toFloat(),
+                color = if (Math.random() < 0.5) Color(0x1200F0FF) else Color(0x12D000FF)
+            )
+        }
+    }
+
+    androidx.compose.foundation.Canvas(modifier = modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+
+        // Draw ambient nebulae
+        nebulaeList.forEach { neb ->
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(neb.color, Color.Transparent),
+                    center = Offset(neb.xPercent * w, neb.yPercent * h),
+                    radius = neb.radius
+                ),
+                radius = neb.radius,
+                center = Offset(neb.xPercent * w, neb.yPercent * h)
+            )
+        }
+
+        // Draw stars
+        starsList.forEach { star ->
+            val starX = star.xPercent * w
+            val starY = ((star.yPercent + progress * star.speed) % 1.0f) * h
+            drawCircle(
+                color = Color.White.copy(alpha = star.alpha),
+                radius = star.size,
+                center = Offset(starX, starY)
+            )
+        }
+    }
+}
+
+@Composable
+fun ParticleDustBackground(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "Dust")
+    val progress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(18000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "DustProgress"
+    )
+
+    val dustList = remember {
+        List(25) {
+            StarData(
+                xPercent = Math.random().toFloat(),
+                yPercent = Math.random().toFloat(),
+                size = (Math.random() * 5 + 3).toFloat(),
+                speed = (Math.random() * 0.2 + 0.05).toFloat(),
+                alpha = (Math.random() * 0.3 + 0.1).toFloat()
+            )
+        }
+    }
+
+    androidx.compose.foundation.Canvas(modifier = modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+
+        dustList.forEach { dust ->
+            val x = ((dust.xPercent + progress * dust.speed * 0.4f) % 1.0f) * w
+            val y = ((dust.yPercent - progress * dust.speed) % 1.0f) * h
+            val adjustedY = if (y < 0f) y + h else y
+            
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        if (dust.size > 5f) Color(0x3300F0FF) else Color(0x33D000FF),
+                        Color.Transparent
+                    ),
+                    center = Offset(x, adjustedY),
+                    radius = dust.size * 2
+                ),
+                radius = dust.size * 2,
+                center = Offset(x, adjustedY)
+            )
+        }
+    }
+}
+
+@Composable
+fun RotatingPlanetAndSpaceship(modifier: Modifier = Modifier) {
+    val infiniteTransition = rememberInfiniteTransition(label = "PlanetAnimation")
+    
+    val rotationProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(15000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "Rotation"
+    )
+
+    val orbitAngle by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(7000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "Orbit"
+    )
+
+    val floatOffset by infiniteTransition.animateFloat(
+        initialValue = -6f,
+        targetValue = 6f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "Float"
+    )
+
+    Box(
+        modifier = modifier
+            .size(160.dp)
+            .graphicsLayer {
+                translationY = floatOffset
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
+            val center = Offset(size.width / 2, size.height / 2)
+            val radius = size.width * 0.28f
+
+            // Atmospheric Glow
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFF00F0FF).copy(alpha = 0.45f), Color(0x00000000)),
+                    center = center,
+                    radius = radius * 1.6f
+                ),
+                radius = radius * 1.6f,
+                center = center
+            )
+
+            // Planet Body
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color(0xFF2C0B54),
+                        Color(0xFF060111)
+                    ),
+                    center = Offset(center.x - radius * 0.2f, center.y - radius * 0.2f),
+                    radius = radius * 1.2f
+                ),
+                radius = radius,
+                center = center
+            )
+
+            // Surface details (clipper)
+            val path = Path().apply {
+                addOval(androidx.compose.ui.geometry.Rect(center, radius))
+            }
+            clipPath(path) {
+                val lineSpacing = radius * 0.35f
+                for (i in -2..8) {
+                    val y = center.y - radius + (i * lineSpacing) + (rotationProgress * lineSpacing)
+                    
+                    drawRect(
+                        brush = Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFF00F0FF).copy(alpha = 0.3f),
+                                Color(0xFFD000FF).copy(alpha = 0.3f),
+                                Color(0xFF00F0FF).copy(alpha = 0.3f)
+                            )
+                        ),
+                        topLeft = Offset(center.x - radius, y - 4f),
+                        size = Size(radius * 2f, 8f)
+                    )
+
+                    drawLine(
+                        color = Color(0xFF00F0FF).copy(alpha = 0.5f),
+                        start = Offset(center.x - radius, y + 10f),
+                        end = Offset(center.x + radius, y + 10f),
+                        strokeWidth = 1.5f
+                    )
+                }
+            }
+
+            // Shadow Overlay
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.Transparent,
+                        Color(0x99010105),
+                        Color(0xFF010105)
+                    ),
+                    center = Offset(center.x - radius * 0.35f, center.y - radius * 0.35f),
+                    radius = radius * 1.3f
+                ),
+                radius = radius,
+                center = center
+            )
+
+            // Orbit line
+            val orbitRx = radius * 1.65f
+            val orbitRy = radius * 0.42f
+            drawOval(
+                color = Color(0x2200F0FF),
+                topLeft = Offset(center.x - orbitRx, center.y - orbitRy),
+                size = Size(orbitRx * 2, orbitRy * 2),
+                style = Stroke(width = 1f)
+            )
+
+            // Spaceship calculations
+            val rad = Math.toRadians(orbitAngle.toDouble())
+            val tiltAngle = Math.toRadians(12.0)
+            val orbitXUn = orbitRx * Math.cos(rad)
+            val orbitYUn = orbitRy * Math.sin(rad)
+            val orbitX = (orbitXUn * Math.cos(tiltAngle) - orbitYUn * Math.sin(tiltAngle)).toFloat()
+            val orbitY = (orbitXUn * Math.sin(tiltAngle) + orbitYUn * Math.cos(tiltAngle)).toFloat()
+            val shipPos = Offset(center.x + orbitX, center.y + orbitY)
+
+            val depthScale = (0.75f + (Math.sin(rad).toFloat() + 1f) * 0.25f)
+
+            // Engine Trail Glow
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color(0xFFFF00A0).copy(alpha = 0.8f), Color.Transparent),
+                    center = shipPos,
+                    radius = 14f * depthScale
+                ),
+                radius = 14f * depthScale,
+                center = shipPos
+            )
+
+            // Fighter Silhouette
+            val shipSize = 8f * depthScale
+            val shipPath = Path().apply {
+                moveTo(shipPos.x, shipPos.y - shipSize)
+                lineTo(shipPos.x - shipSize * 0.8f, shipPos.y + shipSize)
+                lineTo(shipPos.x, shipPos.y + shipSize * 0.4f)
+                lineTo(shipPos.x + shipSize * 0.8f, shipPos.y + shipSize)
+                close()
+            }
+
+            val nextRad = Math.toRadians(orbitAngle.toDouble() + 2)
+            val nextXUn = orbitRx * Math.cos(nextRad)
+            val nextYUn = orbitRy * Math.sin(nextRad)
+            val nextX = (nextXUn * Math.cos(tiltAngle) - nextYUn * Math.sin(tiltAngle)).toFloat()
+            val nextY = (nextXUn * Math.sin(tiltAngle) + nextYUn * Math.cos(tiltAngle)).toFloat()
+            val angleDeg = Math.toDegrees(Math.atan2((nextY - orbitY).toDouble(), (nextX - orbitX).toDouble())).toFloat()
+
+            withTransform({
+                rotate(degrees = angleDeg + 90f, pivot = shipPos)
+            }) {
+                drawPath(
+                    path = shipPath,
+                    brush = Brush.linearGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF00A0)))
+                )
+                drawCircle(
+                    color = Color.White,
+                    radius = 1.5f * depthScale,
+                    center = shipPos
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun LeaderboardOverlayDialog(
     topScores: List<LeaderboardEntry>,
-    highestUnlockedLevel: Int,
-    totalCoins: Int,
-    selectedLevel: Int,
-    onLevelSelected: (Int) -> Unit,
-    onLaunchMission: () -> Unit,
-    onSettingsClick: () -> Unit = {}
+    onClose: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xEE020208)), // Deep immersive dark space blur backing
+            .background(Color(0xBB03030C))
+            .clickable { onClose() },
         contentAlignment = Alignment.Center
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .fillMaxHeight(0.92f)
-                .background(Color(0xAA0A0F2D), shape = RoundedCornerShape(20.dp))
+                .fillMaxWidth(0.92f)
+                .fillMaxHeight(0.78f)
+                .background(Color(0xF2090D26), shape = RoundedCornerShape(24.dp))
                 .border(
                     BorderStroke(2.dp, Brush.linearGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080)))),
-                    shape = RoundedCornerShape(20.dp)
+                    shape = RoundedCornerShape(24.dp)
                 )
-                .padding(16.dp),
+                .clickable(enabled = false) {}
+                .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Title
             Text(
-                text = "COSMIC STRIKER",
-                fontSize = 28.sp,
+                text = "🏆 COLD FLIGHT LOGS",
+                fontSize = 18.sp,
                 fontWeight = FontWeight.ExtraBold,
-                fontFamily = FontFamily.SansSerif,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 2.dp)
-            )
-            
-            Text(
-                text = "GALACTIC DEFENSE FORCE",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                color = Color(0xFF8FA0DD),
-                letterSpacing = 2.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            // Coins Display
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .background(Color(0xFFFFD700).copy(alpha = 0.12f), shape = RoundedCornerShape(12.dp))
-                    .border(BorderStroke(1.dp, Color(0xFFFFD700)), shape = RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text = "🪙 ",
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = "TOTAL COINS: ",
-                    color = Color(0xFFFFD700),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-                Text(
-                    text = String.format("%04d", totalCoins),
-                    color = Color.White,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Level Selector Box
-            Text(
-                text = "SELECT MISSION SECTOR",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFFF0080),
-                letterSpacing = 1.sp,
-                modifier = Modifier.padding(bottom = 6.dp)
-            )
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0x33000000), shape = RoundedCornerShape(12.dp))
-                    .border(BorderStroke(1.dp, Color(0x22FFFFFF)), shape = RoundedCornerShape(12.dp))
-                    .padding(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Row 1: Levels 1-5
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    for (lvl in 1..5) {
-                        LevelSelectorItem(
-                            level = lvl,
-                            isUnlocked = lvl <= highestUnlockedLevel,
-                            isSelected = lvl == selectedLevel,
-                            onClick = { onLevelSelected(lvl) }
-                        )
-                    }
-                }
-
-                // Row 2: Levels 6-10
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    for (lvl in 6..10) {
-                        LevelSelectorItem(
-                            level = lvl,
-                            isUnlocked = lvl <= highestUnlockedLevel,
-                            isSelected = lvl == selectedLevel,
-                            onClick = { onLevelSelected(lvl) }
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Leaderboard Box
-            Text(
-                text = "TOP PILOTS LEADERBOARD",
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
                 color = Color(0xFF00F0FF),
-                letterSpacing = 1.sp,
-                modifier = Modifier.padding(bottom = 6.dp)
+                letterSpacing = 2.sp,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.padding(bottom = 14.dp)
             )
 
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .background(Color(0x55000000), shape = RoundedCornerShape(10.dp))
-                    .border(BorderStroke(1.dp, Color(0x33FFFFFF)), shape = RoundedCornerShape(10.dp))
-                    .padding(6.dp)
+                    .background(Color(0x33000000), shape = RoundedCornerShape(12.dp))
+                    .border(BorderStroke(1.dp, Color(0x22FFFFFF)), shape = RoundedCornerShape(12.dp))
+                    .padding(8.dp)
             ) {
                 if (topScores.isEmpty()) {
                     Box(
@@ -644,18 +875,18 @@ fun MainMenuOverlay(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "NO FLIGHT LOGS FOUND\nBE THE FIRST HERO!",
+                            text = "NO HIGH SCORE DATA DETECTED.\nCOMPLETE MISSIONS TO ESTABLISH FLIGHT LOGS.",
                             color = Color(0xFF8FA0DD),
-                            fontSize = 11.sp,
+                            fontSize = 12.sp,
                             textAlign = TextAlign.Center,
                             fontFamily = FontFamily.Monospace,
-                            lineHeight = 16.sp
+                            lineHeight = 18.sp
                         )
                     }
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         itemsIndexed(topScores) { index, entry ->
                             LeaderboardRow(rank = index + 1, entry = entry)
@@ -664,70 +895,397 @@ fun MainMenuOverlay(
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
-            // Play Button
             Button(
-                onClick = onLaunchMission,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Color.Transparent
-                ),
-                contentPadding = PaddingValues(),
+                onClick = onClose,
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
-                    .border(
-                        BorderStroke(2.dp, Color(0xFF00F0FF)),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    .background(
-                        Brush.linearGradient(listOf(Color(0xFF005577), Color(0xFF00AAAA))),
-                        shape = RoundedCornerShape(12.dp)
-                    )
+                    .border(BorderStroke(1.dp, Color(0xFFFF0080)), shape = RoundedCornerShape(12.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF4A0033), Color(0xFF1E002F))), shape = RoundedCornerShape(12.dp))
+            ) {
+                Text(
+                    text = "DISMISS CONSOLE",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MainMenuOverlay(
+    topScores: List<LeaderboardEntry>,
+    highestUnlockedLevel: Int,
+    totalCoins: Int,
+    selectedLevel: Int,
+    onLevelSelected: (Int) -> Unit,
+    onLaunchMission: () -> Unit,
+    onSettingsClick: () -> Unit = {},
+    soundEnabled: Boolean,
+    onSoundToggled: (Boolean) -> Unit
+) {
+    var showLeaderboardPanel by remember { mutableStateOf(false) }
+
+    val animVisible = remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        animVisible.value = true
+    }
+
+    val enterAlpha by animateFloatAsState(
+        targetValue = if (animVisible.value) 1f else 0f,
+        animationSpec = tween(1200, easing = LinearOutSlowInEasing),
+        label = "FadeIn"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF03030F)),
+        contentAlignment = Alignment.Center
+    ) {
+        // AAA-Quality Dynamic Background Layer
+        StarfieldBackground()
+        ParticleDustBackground()
+
+        // Content layout with entering fade-in effect
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 24.dp)
+                .graphicsLayer { alpha = enterAlpha },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            
+            // 1. TOP STATUS BAR (Coins indicators, etc.)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
+                    modifier = Modifier
+                        .background(Color(0xFFFFD700).copy(alpha = 0.12f), shape = RoundedCornerShape(14.dp))
+                        .border(BorderStroke(1.2.dp, Brush.linearGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))), shape = RoundedCornerShape(14.dp))
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "🪙 ", fontSize = 15.sp)
                     Text(
-                        text = "LAUNCH SECTOR $selectedLevel",
+                        text = "TOTAL COINS: ",
+                        color = Color(0xFFFFD700),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = String.format("%04d", totalCoins),
                         color = Color.White,
                         fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            // 2. HERO HEADER (Title and Subtitle)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(vertical = 10.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    // Magenta holographic backdrop shadow
+                    Text(
+                        text = "COSMIC STRIKER",
+                        fontSize = 35.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFFFF007F).copy(alpha = 0.65f),
+                        textAlign = TextAlign.Center,
+                        letterSpacing = 2.sp,
+                        modifier = Modifier.offset(x = (-2).dp, y = 1.dp)
+                    )
+                    // Cyan holographic backdrop shadow
+                    Text(
+                        text = "COSMIC STRIKER",
+                        fontSize = 35.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF00E5FF).copy(alpha = 0.65f),
+                        textAlign = TextAlign.Center,
+                        letterSpacing = 2.sp,
+                        modifier = Modifier.offset(x = 2.dp, y = (-1).dp)
+                    )
+                    // Core white title text
+                    Text(
+                        text = "COSMIC STRIKER",
+                        fontSize = 35.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
                         letterSpacing = 2.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Text(
+                    text = "GALACTIC DEFENSE",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    color = Color(0xFF00F0FF),
+                    letterSpacing = 6.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .background(Color(0x3A000000), shape = RoundedCornerShape(4.dp))
+                        .border(BorderStroke(0.8.dp, Color(0x6600F0FF)), shape = RoundedCornerShape(4.dp))
+                        .padding(horizontal = 14.dp, vertical = 4.dp)
+                )
+            }
+
+            // 3. MAIN CENTERPIECE ANIMATION (Planet & Space fighter)
+            RotatingPlanetAndSpaceship(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            )
+
+            // 4. LEVEL SECTOR SELECTION PANEL
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
+            ) {
+                Text(
+                    text = "SELECT MISSION SECTOR",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFFF0080),
+                    letterSpacing = 1.5.sp,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0x7F04071C), shape = RoundedCornerShape(16.dp))
+                        .border(
+                            BorderStroke(1.2.dp, Brush.linearGradient(listOf(Color(0x6600F0FF), Color(0x22FFFFFF)))),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Row 1: Levels 1-5
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        for (lvl in 1..5) {
+                            LevelSelectorItem(
+                                level = lvl,
+                                isUnlocked = lvl <= highestUnlockedLevel,
+                                isSelected = lvl == selectedLevel,
+                                onClick = { onLevelSelected(lvl) }
+                            )
+                        }
+                    }
+
+                    // Row 2: Levels 6-10
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        for (lvl in 6..10) {
+                            LevelSelectorItem(
+                                level = lvl,
+                                isUnlocked = lvl <= highestUnlockedLevel,
+                                isSelected = lvl == selectedLevel,
+                                onClick = { onLevelSelected(lvl) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 5. PULSING START MISSION BUTTON
+            val pulseTransition = rememberInfiniteTransition(label = "StartPulse")
+            val pulseScale by pulseTransition.animateFloat(
+                initialValue = 0.98f,
+                targetValue = 1.02f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1000, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "ButtonScale"
+            )
+            val glowAlpha by pulseTransition.animateFloat(
+                initialValue = 0.4f,
+                targetValue = 0.85f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(1000, easing = FastOutSlowInEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "GlowAlpha"
+            )
+
+            Box(
+                modifier = Modifier
+                    .graphicsLayer {
+                        scaleX = pulseScale
+                        scaleY = pulseScale
+                    }
+                    .fillMaxWidth(0.92f)
+                    .padding(bottom = 16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                // Button glow backing
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .background(
+                            Brush.horizontalGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF00A0))),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .graphicsLayer {
+                            scaleX = 1.03f
+                            scaleY = 1.12f
+                            alpha = glowAlpha * 0.4f
+                        }
+                )
+
+                Button(
+                    onClick = onLaunchMission,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .border(
+                            BorderStroke(2.dp, Brush.horizontalGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF00A0)))),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                        .background(
+                            Brush.horizontalGradient(listOf(Color(0xFF024673), Color(0xFF42025C))),
+                            shape = RoundedCornerShape(16.dp)
+                        )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(26.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "LAUNCH SECTOR $selectedLevel",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 2.sp,
+                            fontFamily = FontFamily.SansSerif
+                        )
+                    }
+                }
+            }
+
+            // 6. CYBERNETIC QUICK COMMAND DOCK (Leaderboard, Sound Toggle, System Settings)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Leaderboard Button
+                Button(
+                    onClick = { showLeaderboardPanel = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(42.dp)
+                        .border(BorderStroke(1.dp, Color(0xFF00F0FF).copy(alpha = 0.8f)), shape = RoundedCornerShape(12.dp))
+                        .background(Color(0x660A0F2D), shape = RoundedCornerShape(12.dp))
+                ) {
+                    Text(
+                        text = "🏆 LEADERS",
+                        color = Color(0xFF00F0FF),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                // Sound Button Toggle
+                Button(
+                    onClick = { onSoundToggled(!soundEnabled) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(42.dp)
+                        .border(
+                            BorderStroke(1.dp, if (soundEnabled) Color(0xFF00F0FF) else Color(0x44FFFFFF)),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .background(
+                            if (soundEnabled) Color(0x3300F0FF) else Color(0x22000000),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                ) {
+                    Text(
+                        text = if (soundEnabled) "🔊 AUDIO: ON" else "🔇 AUDIO: OFF",
+                        color = if (soundEnabled) Color.White else Color(0x88FFFFFF),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                // Settings Button
+                IconButton(
+                    onClick = onSettingsClick,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(Color(0x660A0F2D), shape = RoundedCornerShape(12.dp))
+                        .border(BorderStroke(1.dp, Color(0xFF00F0FF).copy(alpha = 0.8f)), shape = RoundedCornerShape(12.dp))
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "System Settings",
+                        tint = Color(0xFF00F0FF)
                     )
                 }
             }
         }
 
-        // Floating Settings Gear at the top right of the screen
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 40.dp, end = 24.dp),
-            contentAlignment = Alignment.TopEnd
-        ) {
-            IconButton(
-                onClick = onSettingsClick,
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(Color(0xAA0A0F2D), shape = RoundedCornerShape(12.dp))
-                    .border(BorderStroke(1.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(12.dp))
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Settings,
-                    contentDescription = "System Settings",
-                    tint = Color(0xFF00F0FF)
-                )
-            }
+        // Leaderboard Console Overlay Modal
+        if (showLeaderboardPanel) {
+            LeaderboardOverlayDialog(
+                topScores = topScores,
+                onClose = { showLeaderboardPanel = false }
+            )
         }
     }
 }
