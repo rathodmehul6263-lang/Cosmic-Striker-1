@@ -741,19 +741,45 @@
         const BULLET_COOLDOWN = 300;     // Shooting frequency
         const STAR_COUNT = 100;
 
-        // --- 10 Level Definitions ---
-        const LEVELS = {
-            1: { name: "Nebula Outpost", targetKills: 35, spawnRate: 1600, speeds: 1.0, boss: false },
-            2: { name: "Asteroid Field", targetKills: 45, spawnRate: 1400, speeds: 1.2, boss: false },
-            3: { name: "Plasma Storm", targetKills: 55, spawnRate: 1250, speeds: 1.4, boss: false },
-            4: { name: "Elite Sector", targetKills: 65, spawnRate: 1100, speeds: 1.6, boss: false },
-            5: { name: "Krell Dreadnought", targetKills: 40, spawnRate: 1000, speeds: 1.8, boss: 'Krell Dreadnought' },
-            6: { name: "Deep Space Void", targetKills: 60, spawnRate: 1100, speeds: 2.0, boss: false },
-            7: { name: "Comet Belt", targetKills: 70, spawnRate: 1000, speeds: 2.2, boss: false },
-            8: { name: "Hyperdrive Lane", targetKills: 80, spawnRate: 900, speeds: 2.4, boss: false },
-            9: { name: "Warp Sector Gamma", targetKills: 95, spawnRate: 800, speeds: 2.6, boss: false },
-            10: { name: "Devastator Core", targetKills: 50, spawnRate: 700, speeds: 2.8, boss: 'Devastator Star' }
-        };
+        // --- 50 Level Definitions with Gradual Difficulty Scaling ---
+        const LEVELS = {};
+        const levelNames = [
+            "Nebula Outpost", "Asteroid Field", "Plasma Storm", "Elite Sector", "Krell Dreadnought",
+            "Deep Space Void", "Comet Belt", "Hyperdrive Lane", "Warp Sector Gamma", "Devastator Star",
+            "Orion Arm", "Meteorite Cluster", "Quantum Reef", "Proxima Centauri", "Omega Reaper",
+            "Supernova Edge", "Stardust Passage", "Cosmic Rift", "Dark Matter Core", "Abyss Overseer",
+            "Andromeda Border", "Binary Star", "Black Hole Vortex", "Wormhole Passage", "Phantom Vanguard",
+            "Singularity Edge", "Interstellar Dust", "Solar Wind Flare", "Titan Shard", "Quantum Monarch",
+            "Galactic Rim", "Pulsar Beam", "Magnetar Pulse", "Neutron Fields", "Void Leviathan",
+            "Event Horizon", "Cosmic Web", "Dark Nebula", "Heliosphere Boundary", "Galactic Tyrant",
+            "Asteroid Core", "Plasma Cascade", "Chronos Vortex", "Quasar Jet", "Cataclysm Engine",
+            "Void Abyss", "Singularity Core", "Eternity Rift", "Deep Infinity", "Cosmic Overlord"
+        ];
+        for (let l = 1; l <= 50; l++) {
+            let targetKills = 25 + l * 5;
+            let spawnRate = Math.max(450, 1600 - l * 25);
+            let speeds = 1.0 + l * 0.08;
+            let boss = false;
+            
+            if (l === 5) { boss = "Krell Dreadnought"; targetKills = 30; }
+            else if (l === 10) { boss = "Devastator Star"; targetKills = 40; }
+            else if (l === 15) { boss = "Omega Reaper"; targetKills = 45; }
+            else if (l === 20) { boss = "Abyss Overseer"; targetKills = 50; }
+            else if (l === 25) { boss = "Phantom Vanguard"; targetKills = 55; }
+            else if (l === 30) { boss = "Quantum Monarch"; targetKills = 60; }
+            else if (l === 35) { boss = "Void Leviathan"; targetKills = 65; }
+            else if (l === 40) { boss = "Galactic Tyrant"; targetKills = 70; }
+            else if (l === 45) { boss = "Cataclysm Engine"; targetKills = 75; }
+            else if (l === 50) { boss = "Cosmic Overlord"; targetKills = 80; }
+
+            LEVELS[l] = {
+                name: levelNames[l - 1] || `Sector ${l}`,
+                targetKills: targetKills,
+                spawnRate: spawnRate,
+                speeds: speeds,
+                boss: boss
+            };
+        }
 
         // Game State Variables
         let gameState = 'START'; // 'START' | 'PLAYING' | 'GAMEOVER'
@@ -1996,6 +2022,10 @@
 
             if (window.AndroidGame && typeof window.AndroidGame.saveTotalCoins === 'function') {
                 window.AndroidGame.saveTotalCoins(totalCoins);
+            }
+
+            if (window.AndroidGame && typeof window.AndroidGame.levelComplete === 'function') {
+                window.AndroidGame.levelComplete(bonusCoins, totalCoins);
             }
 
             // Setup level complete HUD

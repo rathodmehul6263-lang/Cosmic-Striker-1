@@ -22,7 +22,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
@@ -60,7 +63,8 @@ import java.util.*
 enum class GameScreen {
     MENU,
     PLAYING,
-    GAMEOVER
+    GAMEOVER,
+    LEVEL_COMPLETE
 }
 
 class MainActivity : ComponentActivity() {
@@ -78,6 +82,17 @@ class MainActivity : ComponentActivity() {
     private var highestLevelState by mutableStateOf(1)
     private var totalCoinsState by mutableStateOf(0)
     private var selectedLevel by mutableStateOf(1)
+    private var coinsEarnedState by mutableStateOf(0)
+
+    fun onLevelCompleted(coinsEarned: Int, totalCoins: Int) {
+        coinsEarnedState = coinsEarned
+        setTotalCoins(totalCoins)
+        val nextLvl = selectedLevel + 1
+        if (nextLvl > highestLevelState && nextLvl <= 50) {
+            setHighestLevel(nextLvl)
+        }
+        currentScreen = GameScreen.LEVEL_COMPLETE
+    }
 
     fun getHighestLevel(): Int = highestLevelState
     fun setHighestLevel(level: Int) {
@@ -222,7 +237,7 @@ class MainActivity : ComponentActivity() {
                                     isPaused = true
                                     webView?.evaluateJavascript("window.pauseGame()", null)
                                 }
-                            } else if (currentScreen == GameScreen.GAMEOVER) {
+                            } else if (currentScreen == GameScreen.GAMEOVER || currentScreen == GameScreen.LEVEL_COMPLETE) {
                                 currentScreen = GameScreen.MENU
                                 isPaused = false
                                 webView?.evaluateJavascript("window.showStartScreen()", null)
@@ -267,6 +282,31 @@ class MainActivity : ComponentActivity() {
                                     isNewHighScore = isNewHighScore,
                                     topScores = leaderboardList,
                                     onDeployAgain = {
+                                        isPaused = false
+                                        currentScreen = GameScreen.PLAYING
+                                        webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
+                                    },
+                                    onReturnToHangar = {
+                                        isPaused = false
+                                        currentScreen = GameScreen.MENU
+                                        webView?.evaluateJavascript("window.showStartScreen()", null)
+                                    }
+                                )
+                            }
+                            GameScreen.LEVEL_COMPLETE -> {
+                                LevelCompleteOverlay(
+                                    level = selectedLevel,
+                                    coinsEarned = coinsEarnedState,
+                                    totalCoins = totalCoinsState,
+                                    onNextLevel = {
+                                        if (selectedLevel < 50) {
+                                            selectedLevel += 1
+                                            isPaused = false
+                                            currentScreen = GameScreen.PLAYING
+                                            webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
+                                        }
+                                    },
+                                    onReplay = {
                                         isPaused = false
                                         currentScreen = GameScreen.PLAYING
                                         webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
@@ -324,7 +364,7 @@ class MainActivity : ComponentActivity() {
                                         },
                                         onRestart = {
                                             isPaused = false
-                                            webView?.evaluateJavascript("window.startGame()", null)
+                                            webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
                                         },
                                         onMainMenu = {
                                             isPaused = false
@@ -365,7 +405,12 @@ class MainActivity : ComponentActivity() {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
-                WebView(ctx).apply {
+                val webViewContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    ctx.createAttributionContext("default")
+                } else {
+                    ctx
+                }
+                WebView(webViewContext).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
@@ -500,6 +545,13 @@ class GameInterface(
     fun saveTotalCoins(coins: Int) {
         activity.runOnUiThread {
             activity.setTotalCoins(coins)
+        }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun levelComplete(coinsEarned: Int, totalCoins: Int) {
+        activity.runOnUiThread {
+            activity.onLevelCompleted(coinsEarned, totalCoins)
         }
     }
 
@@ -1074,45 +1126,63 @@ fun MainMenuOverlay(
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
 
-                Column(
+                val (difficultyText, difficultyColor) = getDifficultyCategory(selectedLevel)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Text(
+                        text = "SECTOR $selectedLevel: ",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = difficultyText,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Black,
+                        color = difficultyColor,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .height(180.dp)
                         .background(Color(0x7F04071C), shape = RoundedCornerShape(16.dp))
                         .border(
                             BorderStroke(1.2.dp, Brush.linearGradient(listOf(Color(0x6600F0FF), Color(0x22FFFFFF)))),
                             shape = RoundedCornerShape(16.dp)
                         )
                         .padding(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    contentAlignment = Alignment.Center
                 ) {
-                    // Row 1: Levels 1-5
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    val scrollState = rememberScrollState()
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        for (lvl in 1..5) {
-                            LevelSelectorItem(
-                                level = lvl,
-                                isUnlocked = lvl <= highestUnlockedLevel,
-                                isSelected = lvl == selectedLevel,
-                                onClick = { onLevelSelected(lvl) }
-                            )
-                        }
-                    }
-
-                    // Row 2: Levels 6-10
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        for (lvl in 6..10) {
-                            LevelSelectorItem(
-                                level = lvl,
-                                isUnlocked = lvl <= highestUnlockedLevel,
-                                isSelected = lvl == selectedLevel,
-                                onClick = { onLevelSelected(lvl) }
-                            )
+                        for (row in 0 until 10) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                for (col in 1..5) {
+                                    val lvl = row * 5 + col
+                                    LevelSelectorItem(
+                                        level = lvl,
+                                        isUnlocked = lvl <= highestUnlockedLevel,
+                                        isCompleted = lvl < highestUnlockedLevel,
+                                        isSelected = lvl == selectedLevel,
+                                        onClick = { onLevelSelected(lvl) }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -1294,12 +1364,15 @@ fun MainMenuOverlay(
 fun LevelSelectorItem(
     level: Int,
     isUnlocked: Boolean,
+    isCompleted: Boolean,
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
     val borderColor = if (isSelected) Color(0xFF00F0FF) else if (isUnlocked) Color(0x4400F0FF) else Color(0x11FFFFFF)
     val backgroundBrush = if (isSelected) {
         Brush.linearGradient(listOf(Color(0xFF005577), Color(0xFF0088AA)))
+    } else if (isCompleted) {
+        Brush.linearGradient(listOf(Color(0x2200FF55), Color(0x4400FF55)))
     } else if (isUnlocked) {
         Brush.linearGradient(listOf(Color(0x220A0F2D), Color(0x440A0F2D)))
     } else {
@@ -1316,13 +1389,30 @@ fun LevelSelectorItem(
         contentAlignment = Alignment.Center
     ) {
         if (isUnlocked) {
-            Text(
-                text = level.toString(),
-                color = textColor,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
-            )
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+                Text(
+                    text = level.toString(),
+                    color = textColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+                if (isCompleted) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(2.dp),
+                        contentAlignment = Alignment.TopEnd
+                    ) {
+                        Text(
+                            text = "✓",
+                            color = Color(0xFF00FF55),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Black
+                        )
+                    }
+                }
+            }
         } else {
             Text(
                 text = "🔒",
@@ -1908,4 +1998,228 @@ fun SettingsDialog(
             }
         }
     )
+}
+
+fun getDifficultyCategory(level: Int): Pair<String, Color> {
+    return when (level) {
+        in 1..10 -> "EASY" to Color(0xFF00FF88)
+        in 11..20 -> "MEDIUM" to Color(0xFF00F0FF)
+        in 21..30 -> "HARD" to Color(0xFFFFD700)
+        in 31..40 -> "EXPERT" to Color(0xFFFF5500)
+        else -> "EXTREME" to Color(0xFFFF0055)
+    }
+}
+
+@Composable
+fun LevelCompleteOverlay(
+    level: Int,
+    coinsEarned: Int,
+    totalCoins: Int,
+    onNextLevel: () -> Unit,
+    onReplay: () -> Unit,
+    onReturnToHangar: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xF2020F0C)), // Dark teal/green hue immersive overlay
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .fillMaxHeight(0.85f)
+                .background(Color(0xEE0A1D16), shape = RoundedCornerShape(20.dp))
+                .border(
+                    BorderStroke(2.dp, Brush.linearGradient(listOf(Color(0xFF00FF88), Color(0xFF00F0FF)))),
+                    shape = RoundedCornerShape(20.dp)
+                )
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "SECTOR SECURED",
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.SansSerif,
+                color = Color(0xFF00FF88),
+                textAlign = TextAlign.Center
+            )
+
+            Text(
+                text = "SECTOR $level SECURED SUCCESSFULLY",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                color = Color(0xFFA0FFDD),
+                letterSpacing = 1.5.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)
+            )
+
+            // Reward Card
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0x3300FF88)
+                ),
+                border = BorderStroke(1.dp, Color(0x6600FF88)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "MISSION COIN REWARD",
+                        fontSize = 11.sp,
+                        color = Color(0xFFA0FFDD),
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "+$coinsEarned",
+                        fontSize = 36.sp,
+                        color = Color(0xFFFFD700),
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "TOTAL COINS: $totalCoins",
+                        fontSize = 14.sp,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Action buttons: Next Level, Replay, Home
+            if (level < 50) {
+                Button(
+                    onClick = onNextLevel,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent
+                    ),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .border(
+                            BorderStroke(2.dp, Color(0xFF00FF88)),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .background(
+                            Brush.linearGradient(listOf(Color(0xFF006633), Color(0xFF00FF88))),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "NEXT SECTOR",
+                            color = Color.White,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.5.sp
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+
+            // Replay Button
+            Button(
+                onClick = onReplay,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color.Transparent
+                ),
+                contentPadding = PaddingValues(),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .border(
+                        BorderStroke(1.5.dp, Color(0xFF00F0FF)),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    .background(
+                        Brush.linearGradient(listOf(Color(0xFF004466), Color(0xFF0088AA))),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "REPLAY MISSION",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.5.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Return to Hangar (Home Button)
+            OutlinedButton(
+                onClick = onReturnToHangar,
+                border = BorderStroke(1.5.dp, Color(0x88FFFFFF)),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Home,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "RETURN TO HANGAR",
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.5.sp
+                    )
+                }
+            }
+        }
+    }
 }
