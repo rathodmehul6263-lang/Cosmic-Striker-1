@@ -1189,14 +1189,56 @@ fun MainMenuOverlay(
                     .fillMaxWidth()
                     .padding(bottom = 12.dp)
             ) {
-                Text(
-                    text = "SELECT MISSION SECTOR",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFFFF0080),
-                    letterSpacing = 1.5.sp,
-                    modifier = Modifier.padding(bottom = 6.dp)
-                )
+                // Sleek cybernetic section header (transparent glassmorphism with neon cyan/purple border and subtle glow)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .height(52.dp)
+                        .background(
+                            Color(0x3F05081C), // Dark transparent glassmorphic background
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .border(
+                            BorderStroke(
+                                1.2.dp,
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        Color(0xFF00F0FF), // Neon Cyan
+                                        Color(0xFFBD00FF)  // Neon Purple
+                                    )
+                                )
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    // Subtle background glow
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.radialGradient(
+                                    colors = listOf(
+                                        Color(0x2200F0FF),
+                                        Color.Transparent
+                                    )
+                                ),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                    )
+                    
+                    Text(
+                        text = "SELECT MISSION SECTOR",
+                        color = Color.White,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = 2.sp,
+                        textAlign = TextAlign.Center,
+                        fontFamily = FontFamily.SansSerif
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 val (difficultyText, difficultyColor) = getDifficultyCategory(selectedLevel)
                 Row(
