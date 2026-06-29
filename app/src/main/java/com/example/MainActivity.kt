@@ -2,7 +2,11 @@ package com.example
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
+import android.util.Log
 import android.widget.Toast
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.common.api.ApiException
 import android.os.Build
 import android.os.Bundle
 import android.os.Vibrator
@@ -76,6 +80,10 @@ enum class GameScreen {
 }
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        private const val RC_SIGN_IN = 9001
+    }
+
     private lateinit var leaderboardManager: LeaderboardManager
     var webView: WebView? = null
 
@@ -107,6 +115,16 @@ class MainActivity : ComponentActivity() {
         highestLevelState = level
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
         prefs.edit().putInt("highest_unlocked_level", level).apply()
+        AuthManager.currentUser?.let { user ->
+            AuthManager.saveAccountProgress(
+                context = this,
+                userId = user.id,
+                coins = totalCoinsState,
+                level = level,
+                equippedShip = equippedShipIdState,
+                ownedShips = ownedShipsState
+            )
+        }
     }
 
     fun getTotalCoins(): Int = totalCoinsState
@@ -114,6 +132,16 @@ class MainActivity : ComponentActivity() {
         totalCoinsState = coins
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
         prefs.edit().putInt("total_coins", coins).apply()
+        AuthManager.currentUser?.let { user ->
+            AuthManager.saveAccountProgress(
+                context = this,
+                userId = user.id,
+                coins = coins,
+                level = highestLevelState,
+                equippedShip = equippedShipIdState,
+                ownedShips = ownedShipsState
+            )
+        }
     }
 
     // Spaceship Garage & Selection state variables
@@ -128,6 +156,16 @@ class MainActivity : ComponentActivity() {
         webView?.post {
             webView?.evaluateJavascript("window.syncEquippedShip()", null)
         }
+        AuthManager.currentUser?.let { user ->
+            AuthManager.saveAccountProgress(
+                context = this,
+                userId = user.id,
+                coins = totalCoinsState,
+                level = highestLevelState,
+                equippedShip = shipId,
+                ownedShips = ownedShipsState
+            )
+        }
     }
 
     fun getOwnedShips(): Set<String> = ownedShipsState
@@ -139,6 +177,16 @@ class MainActivity : ComponentActivity() {
             .putString("owned_ships_csv", csv)
             .putStringSet("owned_ships", ships)
             .apply()
+        AuthManager.currentUser?.let { user ->
+            AuthManager.saveAccountProgress(
+                context = this,
+                userId = user.id,
+                coins = totalCoinsState,
+                level = highestLevelState,
+                equippedShip = equippedShipIdState,
+                ownedShips = ships
+            )
+        }
     }
 
     // Sound, Music, Vibration, Pause states
@@ -187,12 +235,7 @@ class MainActivity : ComponentActivity() {
 
     fun vibratePhone(durationMs: Long) {
         if (!vibrationEnabledState) return
-        val targetContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            createAttributionContext("default")
-        } else {
-            this
-        }
-        val vibrator = targetContext.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
+        val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         if (vibrator != null && vibrator.hasVibrator()) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator.vibrate(VibrationEffect.createOneShot(durationMs, VibrationEffect.DEFAULT_AMPLITUDE))
@@ -204,34 +247,46 @@ class MainActivity : ComponentActivity() {
     }
 
     fun handleLoginSuccess(profile: UserProfile) {
-        val earnedBonus = AuthManager.checkAndRewardBonus(this, profile.id)
-        if (earnedBonus) {
-            val newCoins = totalCoinsState + 200
-            setTotalCoins(newCoins)
-            AuthManager.saveAccountProgress(
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        val hasSavedDataKey = "user_${profile.id}_has_saved_data"
+        val hasSavedData = prefs.getBoolean(hasSavedDataKey, false)
+        
+        if (hasSavedData) {
+            // Restore existing progress for this account
+            AuthManager.syncAccountProgress(
                 context = this,
                 userId = profile.id,
-                coins = newCoins,
-                level = highestLevelState,
-                equippedShip = equippedShipIdState,
-                ownedShips = ownedShipsState
-            )
-            showBonusPopup = true
-        }
-        
-        AuthManager.syncAccountProgress(
-            context = this,
-            userId = profile.id,
-            currentCoins = totalCoinsState,
-            currentLevel = highestLevelState,
-            currentEquippedShip = equippedShipIdState,
-            currentOwnedShips = ownedShipsState
-        ) { coins, level, equippedShip, ownedShips ->
-            totalCoinsState = coins
-            highestLevelState = level
-            equippedShipIdState = equippedShip
-            ownedShipsState = ownedShips
-            selectedLevel = level
+                currentCoins = totalCoinsState,
+                currentLevel = highestLevelState,
+                currentEquippedShip = equippedShipIdState,
+                currentOwnedShips = ownedShipsState
+            ) { coins, level, equippedShip, ownedShips ->
+                totalCoinsState = coins
+                highestLevelState = level
+                equippedShipIdState = equippedShip
+                ownedShipsState = ownedShips
+                selectedLevel = level
+            }
+        } else {
+            // This is a brand new account first-time sign-in!
+            // Award 200 bonus coins to current progress
+            val earnedBonus = AuthManager.checkAndRewardBonus(this, profile.id)
+            if (earnedBonus) {
+                totalCoinsState += 200
+                showBonusPopup = true
+            }
+            
+            // Save current progress as the account's initial progress
+            AuthManager.syncAccountProgress(
+                context = this,
+                userId = profile.id,
+                currentCoins = totalCoinsState,
+                currentLevel = highestLevelState,
+                currentEquippedShip = equippedShipIdState,
+                currentOwnedShips = ownedShipsState
+            ) { coins, level, equippedShip, ownedShips ->
+                // Keep the current progress
+            }
         }
         
         AuthManager.saveSession(this, profile)
@@ -269,6 +324,89 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, "Logged out", Toast.LENGTH_SHORT).show()
     }
 
+    fun triggerGoogleSignIn() {
+        try {
+            val signInIntent = AuthManager.googleSignInClient.signInIntent
+            startActivityForResult(signInIntent, RC_SIGN_IN)
+        } catch (e: Exception) {
+            Log.e("Auth", "Failed to start Google sign in intent", e)
+            Toast.makeText(this, "Google Sign-In initialization failed. Using Sandbox fallback.", Toast.LENGTH_LONG).show()
+            val userProfile = UserProfile(
+                id = "google_test_pilot",
+                name = "Test Google Pilot",
+                email = "test.pilot@gmail.com",
+                photoUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
+                provider = "Google"
+            )
+            handleLoginSuccess(userProfile)
+        }
+    }
+
+    fun triggerFacebookLogin() {
+        try {
+            com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
+                this,
+                listOf("email", "public_profile")
+            )
+        } catch (e: Exception) {
+            Log.e("Auth", "Failed to start Facebook login", e)
+            Toast.makeText(this, "Facebook Login initialization failed. Using Sandbox fallback.", Toast.LENGTH_LONG).show()
+            val userProfile = UserProfile(
+                id = "facebook_test_pilot",
+                name = "Test Facebook Pilot",
+                email = "fb.pilot@facebook.com",
+                photoUrl = "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80",
+                provider = "Facebook"
+            )
+            handleLoginSuccess(userProfile)
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        try {
+            AuthManager.callbackManager.onActivityResult(requestCode, resultCode, data)
+        } catch (e: Exception) {
+            Log.e("Auth", "CallbackManager error", e)
+        }
+
+        if (requestCode == RC_SIGN_IN) {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+            handleGoogleSignInResult(task)
+        }
+    }
+
+    private fun handleGoogleSignInResult(completedTask: com.google.android.gms.tasks.Task<com.google.android.gms.auth.api.signin.GoogleSignInAccount>) {
+        try {
+            val account = completedTask.getResult(ApiException::class.java)
+            if (account != null) {
+                val userProfile = UserProfile(
+                    id = account.id ?: "g_user_${System.currentTimeMillis()}",
+                    name = account.displayName ?: "Google Pilot",
+                    email = account.email ?: "pilot@gmail.com",
+                    photoUrl = account.photoUrl?.toString() ?: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
+                    provider = "Google"
+                )
+                handleLoginSuccess(userProfile)
+            } else {
+                throw Exception("Google account is null")
+            }
+        } catch (e: Exception) {
+            val statusCode = (e as? ApiException)?.statusCode ?: -1
+            Log.e("Auth", "Google sign_in failed: code=" + statusCode)
+            Toast.makeText(this, "Google Sign-In failed: code=$statusCode. Using Sandbox profile.", Toast.LENGTH_LONG).show()
+            
+            val userProfile = UserProfile(
+                id = "google_test_pilot",
+                name = "Test Google Pilot",
+                email = "test.pilot@gmail.com",
+                photoUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
+                provider = "Google"
+            )
+            handleLoginSuccess(userProfile)
+        }
+    }
+
     fun playClickSound() {
         webView?.post {
             webView?.evaluateJavascript("sound.playClick()", null)
@@ -302,6 +440,43 @@ class MainActivity : ComponentActivity() {
 
         // Initialize AuthManager & load active user progress if signed in
         AuthManager.init(this)
+        try {
+            com.facebook.login.LoginManager.getInstance().registerCallback(
+                AuthManager.callbackManager,
+                object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
+                    override fun onSuccess(result: com.facebook.login.LoginResult) {
+                        val userProfile = UserProfile(
+                            id = result.accessToken?.userId ?: "fb_user_${System.currentTimeMillis()}",
+                            name = "Starfighter Jax",
+                            email = "jax.striker@galaxy.net",
+                            photoUrl = "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80",
+                            provider = "Facebook"
+                        )
+                        handleLoginSuccess(userProfile)
+                    }
+
+                    override fun onCancel() {
+                        Toast.makeText(this@MainActivity, "Facebook login cancelled", Toast.LENGTH_SHORT).show()
+                    }
+
+                    override fun onError(error: com.facebook.FacebookException) {
+                        Log.e("Auth", "Facebook login error", error)
+                        Toast.makeText(this@MainActivity, "Facebook Login failed. Using Sandbox fallback.", Toast.LENGTH_LONG).show()
+                        val userProfile = UserProfile(
+                            id = "facebook_test_pilot",
+                            name = "Test Facebook Pilot",
+                            email = "fb.pilot@facebook.com",
+                            photoUrl = "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80",
+                            provider = "Facebook"
+                        )
+                        handleLoginSuccess(userProfile)
+                    }
+                }
+            )
+        } catch (e: Exception) {
+            Log.e("Auth", "Failed to register Facebook login callback", e)
+        }
+
         val activeUser = AuthManager.currentUser
         if (activeUser != null) {
             AuthManager.syncAccountProgress(
@@ -559,8 +734,14 @@ class MainActivity : ComponentActivity() {
                         // Auth Welcome Screen for first launches
                         if (showAuthWelcomeScreen) {
                             AuthWelcomeOverlay(
-                                onLoginSuccess = { profile ->
-                                    handleLoginSuccess(profile)
+                                onGoogleLoginClick = {
+                                    playClickSound()
+                                    triggerGoogleSignIn()
+                                    showAuthWelcomeScreen = false
+                                },
+                                onFacebookLoginClick = {
+                                    playClickSound()
+                                    triggerFacebookLogin()
                                     showAuthWelcomeScreen = false
                                 },
                                 onPlayAsGuest = {
@@ -610,12 +791,7 @@ class MainActivity : ComponentActivity() {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
-                val webViewContext = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    ctx.createAttributionContext("default")
-                } else {
-                    ctx
-                }
-                WebView(webViewContext).apply {
+                WebView(ctx).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
@@ -3357,7 +3533,8 @@ fun StatProgressBar(label: String, value: Float, color: Color) {
 
 @Composable
 fun AuthWelcomeOverlay(
-    onLoginSuccess: (UserProfile) -> Unit,
+    onGoogleLoginClick: () -> Unit,
+    onFacebookLoginClick: () -> Unit,
     onPlayAsGuest: () -> Unit
 ) {
     Box(
@@ -3420,10 +3597,7 @@ fun AuthWelcomeOverlay(
 
             // Google Sign In Button
             Button(
-                onClick = {
-                    val googleProfiles = AuthManager.googleSimulationProfiles
-                    onLoginSuccess(googleProfiles.first())
-                },
+                onClick = onGoogleLoginClick,
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier
@@ -3449,10 +3623,7 @@ fun AuthWelcomeOverlay(
 
             // Facebook Sign In Button
             Button(
-                onClick = {
-                    val fbProfiles = AuthManager.facebookSimulationProfiles
-                    onLoginSuccess(fbProfiles.first())
-                },
+                onClick = onFacebookLoginClick,
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1877F2)),
                 shape = RoundedCornerShape(10.dp),
                 modifier = Modifier
@@ -3473,78 +3644,6 @@ fun AuthWelcomeOverlay(
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.SansSerif
                     )
-                }
-            }
-
-            // Alternative selector terminals (Predefined interactive accounts)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0x22000000), shape = RoundedCornerShape(10.dp))
-                    .border(BorderStroke(1.dp, Color(0x3300F0FF)), shape = RoundedCornerShape(10.dp))
-                    .padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "SELECT CHOOSE-YOUR-AVATAR INTEGRATION:",
-                    color = Color(0xFF00F0FF),
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.padding(bottom = 2.dp)
-                )
-
-                (AuthManager.googleSimulationProfiles + AuthManager.facebookSimulationProfiles).forEach { profile ->
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0xFF0F172A), shape = RoundedCornerShape(8.dp))
-                            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)), shape = RoundedCornerShape(8.dp))
-                            .clickable { onLoginSuccess(profile) }
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        AsyncImage(
-                            model = profile.photoUrl,
-                            contentDescription = "Avatar",
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .border(1.dp, if (profile.provider == "Google") Color.White else Color(0xFF1877F2), CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = profile.name,
-                                color = Color.White,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.SansSerif
-                            )
-                            Text(
-                                text = profile.email,
-                                color = Color.Gray,
-                                fontSize = 9.sp,
-                                fontFamily = FontFamily.SansSerif
-                            )
-                        }
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    if (profile.provider == "Google") Color.White.copy(alpha = 0.15f) else Color(0xFF1877F2).copy(alpha = 0.15f),
-                                    shape = RoundedCornerShape(4.dp)
-                                )
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = profile.provider.uppercase(),
-                                color = if (profile.provider == "Google") Color.White else Color(0xFF1877F2),
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                    }
                 }
             }
 

@@ -35,41 +35,6 @@ object AuthManager {
     lateinit var googleSignInClient: GoogleSignInClient
 
     private const val PREFS_NAME = "cosmic_striker_prefs"
-    
-    // Standard predefined sci-fi characters for interactive simulation
-    val googleSimulationProfiles = listOf(
-        UserProfile(
-            id = "g_alex_vance",
-            name = "Major Alex Vance",
-            email = "alex.vance@starfleet.com",
-            photoUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
-            provider = "Google"
-        ),
-        UserProfile(
-            id = "g_ellen_ripley",
-            name = "Commander Ellen Ripley",
-            email = "ripley@nostromo.org",
-            photoUrl = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&q=80",
-            provider = "Google"
-        )
-    )
-
-    val facebookSimulationProfiles = listOf(
-        UserProfile(
-            id = "fb_jax_striker",
-            name = "Starfighter Jax",
-            email = "jax.striker@galaxy.net",
-            photoUrl = "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80",
-            provider = "Facebook"
-        ),
-        UserProfile(
-            id = "fb_nova_prime",
-            name = "Nova Prime",
-            email = "nova.prime@facebook.com",
-            photoUrl = "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=150&q=80",
-            provider = "Facebook"
-        )
-    )
 
     fun init(context: Context) {
         callbackManager = CallbackManager.Factory.create()
