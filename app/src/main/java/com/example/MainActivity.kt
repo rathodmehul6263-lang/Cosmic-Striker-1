@@ -49,6 +49,9 @@ import androidx.compose.animation.core.*
 import androidx.compose.animation.*
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Path
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -106,6 +109,27 @@ class MainActivity : ComponentActivity() {
         totalCoinsState = coins
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
         prefs.edit().putInt("total_coins", coins).apply()
+    }
+
+    // Spaceship Garage & Selection state variables
+    private var equippedShipIdState by mutableStateOf("falcon")
+    private var ownedShipsState by mutableStateOf(setOf("falcon"))
+
+    fun getEquippedShipId(): String = equippedShipIdState
+    fun setEquippedShipId(shipId: String) {
+        equippedShipIdState = shipId
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("equipped_ship_id", shipId).apply()
+        webView?.post {
+            webView?.evaluateJavascript("window.syncEquippedShip()", null)
+        }
+    }
+
+    fun getOwnedShips(): Set<String> = ownedShipsState
+    fun setOwnedShips(ships: Set<String>) {
+        ownedShipsState = ships
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putStringSet("owned_ships", ships).apply()
     }
 
     // Sound, Music, Vibration, Pause states
@@ -187,6 +211,9 @@ class MainActivity : ComponentActivity() {
         highestLevelState = prefs.getInt("highest_unlocked_level", 1)
         totalCoinsState = prefs.getInt("total_coins", 0)
         selectedLevel = highestLevelState
+
+        equippedShipIdState = prefs.getString("equipped_ship_id", "falcon") ?: "falcon"
+        ownedShipsState = prefs.getStringSet("owned_ships", setOf("falcon")) ?: setOf("falcon")
 
         // Hide Android System Bars (Status and Navigation) to provide true immersive arcade view
         window.decorView.systemUiVisibility = (
@@ -273,6 +300,18 @@ class MainActivity : ComponentActivity() {
                                         setMusicEnabled(enabled)
                                         setVibrationEnabled(enabled)
                                         playClickSound()
+                                    },
+                                    equippedShipId = equippedShipIdState,
+                                    ownedShips = ownedShipsState,
+                                    onEquipShip = { shipId ->
+                                        setEquippedShipId(shipId)
+                                    },
+                                    onBuyShip = { shipId, cost ->
+                                        if (totalCoinsState >= cost) {
+                                            setTotalCoins(totalCoinsState - cost)
+                                            setOwnedShips(ownedShipsState + shipId)
+                                            playClickSound()
+                                        }
                                     }
                                 )
                             }
@@ -560,6 +599,11 @@ class GameInterface(
         activity.runOnUiThread {
             activity.webView?.evaluateJavascript("window.showStartScreen()", null)
         }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun getEquippedShipId(): String {
+        return activity.getEquippedShipId()
     }
 }
 
@@ -981,7 +1025,11 @@ fun MainMenuOverlay(
     onLaunchMission: () -> Unit,
     onSettingsClick: () -> Unit = {},
     soundEnabled: Boolean,
-    onSoundToggled: (Boolean) -> Unit
+    onSoundToggled: (Boolean) -> Unit,
+    equippedShipId: String,
+    ownedShips: Set<String>,
+    onEquipShip: (String) -> Unit,
+    onBuyShip: (String, Int) -> Unit
 ) {
     var showLeaderboardPanel by remember { mutableStateOf(false) }
 
@@ -1103,10 +1151,15 @@ fun MainMenuOverlay(
                 )
             }
 
-            // 3. MAIN CENTERPIECE ANIMATION (Planet & Space fighter)
-            RotatingPlanetAndSpaceship(
+            // 3. MAIN CENTERPIECE ANIMATION - Spaceship Selection Garage Carousel
+            SpaceshipGarageCarousel(
+                totalCoins = totalCoins,
+                equippedShipId = equippedShipId,
+                ownedShips = ownedShips,
+                onEquipShip = onEquipShip,
+                onBuyShip = onBuyShip,
                 modifier = Modifier
-                    .weight(1f)
+                    .weight(1.3f)
                     .fillMaxWidth()
             )
 
@@ -2220,6 +2273,617 @@ fun LevelCompleteOverlay(
                     )
                 }
             }
+        }
+    }
+}
+
+// --- SPACESHIP GARAGE & SELECTION MODELS AND COMPOSABLES ---
+
+data class Spaceship(
+    val id: String,
+    val name: String,
+    val cost: Int,
+    val powerDesc: String,
+    val speed: Float,       // 0.0f to 1.0f representation for HUD
+    val damage: Float,      // 0.0f to 1.0f representation for HUD
+    val shield: Float,      // 0.0f to 1.0f representation for HUD
+    val fireRate: Float,    // 0.0f to 1.0f representation for HUD
+    val engineColor: Color,
+    val bulletColor: Color,
+    val description: String
+)
+
+val SPACESHIPS_LIST = listOf(
+    Spaceship("falcon", "Falcon Mk-I", 0, "Balanced Federation Specs", 0.5f, 0.4f, 0.5f, 0.5f, Color(0xFFFF6A00), Color(0xFF00F0FF), "Standard Federation starfighter. Highly reliable and versatile."),
+    Spaceship("lightning", "Lightning X", 500, "⚡ +20% Fire Rate & Speed boost", 0.7f, 0.4f, 0.5f, 0.8f, Color(0xFF00FFFF), Color(0xFFFFD700), "Sleek interceptor with hyper-charged capacitor cores for lightning speed."),
+    Spaceship("titan", "Titan Defender", 1500, "🛡️ +40% Reinforced Shield Shell", 0.3f, 0.5f, 0.9f, 0.3f, Color(0xFF00FF00), Color(0xFF39FF14), "Heavy armored dreadnought designed to withstand devastating cosmic attacks."),
+    Spaceship("phoenix", "Phoenix Blaster", 3000, "🔥 Double Bullet Kinetic Damage", 0.5f, 0.8f, 0.4f, 0.5f, Color(0xFFFF0000), Color(0xFFFF4500), "Equipped with hyper-dense plasma chargers that incinerate enemy fleets."),
+    Spaceship("frost", "Frost Wing", 5000, "❄️ Emits Sub-Zero 20% Time Dilation", 0.6f, 0.5f, 0.6f, 0.5f, Color(0xFF87CEFA), Color(0xFF00BFFF), "Fires chronal freeze-pulses that delay and slow down all incoming threats."),
+    Spaceship("nova", "Nova Destroyer", 8000, "💥 Explosive Kinetic Shockwave Splash", 0.4f, 0.7f, 0.7f, 0.4f, Color(0xFF8A2BE2), Color(0xFFFF00FF), "Generates collateral micro-nova blasts upon securing enemy destructions."),
+    Spaceship("phantom", "Phantom Stealth", 12000, "👤 5-Second Phase-Cloak Invincibility", 0.8f, 0.5f, 0.5f, 0.6f, Color(0xFF4B0082), Color(0xFF9370DB), "Phase-shifts on launch, granting five seconds of complete invulnerability."),
+    Spaceship("cosmic", "Cosmic Emperor", 20000, "👑 Legendary Golden 5-Way Bullet Spread", 0.9f, 1.0f, 0.9f, 0.9f, Color(0xFFFF1493), Color(0xFFFFEA00), "The supreme imperial flagship. Fires devastating 5-way cosmic blasters.")
+)
+
+@Composable
+fun DrawSpaceshipCanvas(
+    shipId: String,
+    flameScale: Float,
+    modifier: Modifier = Modifier
+) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val cx = w / 2
+        val cy = h / 2
+
+        // Flame colors
+        val flameColor = when (shipId) {
+            "falcon" -> Color(0xFFFF6A00)
+            "lightning" -> Color(0xFF00FFFF)
+            "titan" -> Color(0xFF00FF00)
+            "phoenix" -> Color(0xFFFF0000)
+            "frost" -> Color(0xFF87CEFA)
+            "nova" -> Color(0xFF8A2BE2)
+            "phantom" -> Color(0xFF4B0082)
+            "cosmic" -> Color(0xFFFF1493)
+            else -> Color(0xFFFF6A00)
+        }
+        val flameCoreColor = when (shipId) {
+            "falcon" -> Color(0xFFFFEA00)
+            "lightning" -> Color(0xFFFFFFFF)
+            "titan" -> Color(0xFFE0FFE0)
+            "phoenix" -> Color(0xFFFFD700)
+            "frost" -> Color(0xFFFFFFFF)
+            "nova" -> Color(0xFFFF00FF)
+            "phantom" -> Color(0xFFDDA0DD)
+            "cosmic" -> Color(0xFFFFD700)
+            else -> Color(0xFFFFEA00)
+        }
+
+        // Draw thruster fire
+        val baseFlameLen = 30f * flameScale
+        val pathFlame = Path().apply {
+            moveTo(cx - 12f, cy + 20f)
+            lineTo(cx + 12f, cy + 20f)
+            lineTo(cx, cy + 20f + baseFlameLen)
+            close()
+        }
+        drawPath(
+            path = pathFlame,
+            brush = Brush.verticalGradient(listOf(flameColor, Color.Transparent))
+        )
+        val pathFlameCore = Path().apply {
+            moveTo(cx - 6f, cy + 20f)
+            lineTo(cx + 6f, cy + 20f)
+            lineTo(cx, cy + 20f + baseFlameLen * 0.6f)
+            close()
+        }
+        drawPath(
+            path = pathFlameCore,
+            brush = Brush.verticalGradient(listOf(flameCoreColor, Color.Transparent))
+        )
+
+        // Ship Chassis color
+        val shipColor = when (shipId) {
+            "falcon" -> Color(0xFF00F0FF)
+            "lightning" -> Color(0xFFFFFF00)
+            "titan" -> Color(0xFF00FFaa)
+            "phoenix" -> Color(0xFFFF4500)
+            "frost" -> Color(0xFF00BFFF)
+            "nova" -> Color(0xFFFF00FF)
+            "phantom" -> Color(0xFF9370DB)
+            "cosmic" -> Color(0xFFFFD700)
+            else -> Color(0xFF00F0FF)
+        }
+
+        when (shipId) {
+            "falcon" -> {
+                val body = Path().apply {
+                    moveTo(cx, cy - 30f)
+                    lineTo(cx - 24f, cy + 15f)
+                    lineTo(cx - 12f, cy + 20f)
+                    lineTo(cx + 12f, cy + 20f)
+                    lineTo(cx + 24f, cy + 15f)
+                    close()
+                }
+                drawPath(body, brush = Brush.linearGradient(listOf(Color(0xFF060A26), Color(0xFF0C1647))))
+                drawPath(body, color = shipColor, style = Stroke(width = 3f))
+
+                val cockpit = Path().apply {
+                    moveTo(cx, cy - 18f)
+                    lineTo(cx - 5f, cy)
+                    lineTo(cx + 5f, cy)
+                    close()
+                }
+                drawPath(cockpit, color = Color.White)
+            }
+            "lightning" -> {
+                val body = Path().apply {
+                    moveTo(cx - 6f, cy - 35f)
+                    lineTo(cx - 10f, cy - 10f)
+                    lineTo(cx - 32f, cy - 20f)
+                    lineTo(cx - 20f, cy + 15f)
+                    lineTo(cx - 8f, cy + 10f)
+                    lineTo(cx, cy + 22f)
+                    lineTo(cx + 8f, cy + 10f)
+                    lineTo(cx + 20f, cy + 15f)
+                    lineTo(cx + 32f, cy - 20f)
+                    lineTo(cx + 10f, cy - 10f)
+                    lineTo(cx + 6f, cy - 35f)
+                    close()
+                }
+                drawPath(body, brush = Brush.linearGradient(listOf(Color(0xFF030D1E), Color(0xFF082245))))
+                drawPath(body, color = shipColor, style = Stroke(width = 3f))
+
+                val cockpit = Path().apply {
+                    moveTo(cx, cy - 15f)
+                    lineTo(cx - 4f, cy + 5f)
+                    lineTo(cx + 4f, cy + 5f)
+                    close()
+                }
+                drawPath(cockpit, color = Color(0xFF00FFFF))
+            }
+            "titan" -> {
+                val body = Path().apply {
+                    moveTo(cx - 12f, cy - 25f)
+                    lineTo(cx - 12f, cy - 10f)
+                    lineTo(cx - 30f, cy - 5f)
+                    lineTo(cx - 30f, cy + 15f)
+                    lineTo(cx - 15f, cy + 22f)
+                    lineTo(cx + 15f, cy + 22f)
+                    lineTo(cx + 30f, cy + 15f)
+                    lineTo(cx + 30f, cy - 5f)
+                    lineTo(cx + 12f, cy - 10f)
+                    lineTo(cx + 12f, cy - 25f)
+                    close()
+                }
+                drawPath(body, brush = Brush.linearGradient(listOf(Color(0xFF041812), Color(0xFF0B2E24))))
+                drawPath(body, color = shipColor, style = Stroke(width = 3.5f))
+
+                val cockpit = Path().apply {
+                    moveTo(cx, cy - 10f)
+                    lineTo(cx - 8f, cy + 10f)
+                    lineTo(cx + 8f, cy + 10f)
+                    close()
+                }
+                drawPath(cockpit, color = Color(0xFF39FF14))
+            }
+            "phoenix" -> {
+                val body = Path().apply {
+                    moveTo(cx, cy - 38f)
+                    lineTo(cx - 12f, cy - 5f)
+                    lineTo(cx - 35f, cy + 12f)
+                    lineTo(cx - 15f, cy + 12f)
+                    lineTo(cx - 8f, cy + 24f)
+                    lineTo(cx + 8f, cy + 24f)
+                    lineTo(cx + 15f, cy + 12f)
+                    lineTo(cx + 35f, cy + 12f)
+                    lineTo(cx + 12f, cy - 5f)
+                    close()
+                }
+                drawPath(body, brush = Brush.linearGradient(listOf(Color(0xFF280303), Color(0xFF4C0808))))
+                drawPath(body, color = shipColor, style = Stroke(width = 3f))
+
+                val cockpit = Path().apply {
+                    moveTo(cx, cy - 15f)
+                    lineTo(cx - 5f, cy + 5f)
+                    lineTo(cx + 5f, cy + 5f)
+                    close()
+                }
+                drawPath(cockpit, color = Color(0xFFFFD700))
+            }
+            "frost" -> {
+                val body = Path().apply {
+                    moveTo(cx, cy - 32f)
+                    lineTo(cx - 10f, cy - 12f)
+                    lineTo(cx - 32f, cy + 8f)
+                    lineTo(cx - 28f, cy - 8f)
+                    lineTo(cx - 10f, cy + 18f)
+                    lineTo(cx + 10f, cy + 18f)
+                    lineTo(cx + 28f, cy - 8f)
+                    lineTo(cx + 32f, cy + 8f)
+                    lineTo(cx + 10f, cy - 12f)
+                    close()
+                }
+                drawPath(body, brush = Brush.linearGradient(listOf(Color(0xFF011520), Color(0xFF03263B))))
+                drawPath(body, color = shipColor, style = Stroke(width = 3f))
+
+                val cockpit = Path().apply {
+                    moveTo(cx, cy - 14f)
+                    lineTo(cx - 4f, cy + 3f)
+                    lineTo(cx + 4f, cy + 3f)
+                    close()
+                }
+                drawPath(cockpit, color = Color(0xFF00BFFF))
+            }
+            "nova" -> {
+                val body = Path().apply {
+                    moveTo(cx - 5f, cy - 36f)
+                    lineTo(cx - 12f, cy - 10f)
+                    lineTo(cx - 34f, cy + 16f)
+                    lineTo(cx - 14f, cy + 16f)
+                    lineTo(cx, cy + 25f)
+                    lineTo(cx + 14f, cy + 16f)
+                    lineTo(cx + 34f, cy + 16f)
+                    lineTo(cx + 12f, cy - 10f)
+                    lineTo(cx + 5f, cy - 36f)
+                    close()
+                }
+                drawPath(body, brush = Brush.linearGradient(listOf(Color(0xFF160120), Color(0xFF2C033E))))
+                drawPath(body, color = shipColor, style = Stroke(width = 3f))
+
+                val cockpit = Path().apply {
+                    moveTo(cx, cy - 16f)
+                    lineTo(cx - 5f, cy + 6f)
+                    lineTo(cx + 5f, cy + 6f)
+                    close()
+                }
+                drawPath(cockpit, color = Color.White)
+            }
+            "phantom" -> {
+                val body = Path().apply {
+                    moveTo(cx, cy - 28f)
+                    lineTo(cx - 36f, cy + 15f)
+                    lineTo(cx - 16f, cy + 15f)
+                    lineTo(cx - 8f, cy + 22f)
+                    lineTo(cx + 8f, cy + 22f)
+                    lineTo(cx + 16f, cy + 15f)
+                    lineTo(cx + 36f, cy + 15f)
+                    close()
+                }
+                drawPath(body, brush = Brush.linearGradient(listOf(Color(0xFF0D021A), Color(0xFF1B0533))))
+                drawPath(body, color = shipColor, style = Stroke(width = 3f))
+
+                val cockpit = Path().apply {
+                    moveTo(cx, cy - 12f)
+                    lineTo(cx - 4f, cy + 2f)
+                    lineTo(cx + 4f, cy + 2f)
+                    close()
+                }
+                drawPath(cockpit, color = Color(0xFFFF00FF))
+            }
+            "cosmic" -> {
+                val body = Path().apply {
+                    moveTo(cx, cy - 42f)
+                    lineTo(cx - 8f, cy - 10f)
+                    lineTo(cx - 36f, cy - 5f)
+                    lineTo(cx - 24f, cy + 20f)
+                    lineTo(cx - 10f, cy + 12f)
+                    lineTo(cx, cy + 28f)
+                    lineTo(cx + 10f, cy + 12f)
+                    lineTo(cx + 24f, cy + 20f)
+                    lineTo(cx + 36f, cy - 5f)
+                    lineTo(cx + 8f, cy - 10f)
+                    close()
+                }
+                drawPath(body, brush = Brush.linearGradient(listOf(Color(0xFF261D02), Color(0xFF4C3D06))))
+                drawPath(body, color = shipColor, style = Stroke(width = 3.5f))
+
+                // Left & Right auxiliary hulls
+                drawLine(color = shipColor, start = Offset(cx - 18f, cy - 5f), end = Offset(cx - 18f, cy - 22f), strokeWidth = 3f)
+                drawLine(color = shipColor, start = Offset(cx + 18f, cy - 5f), end = Offset(cx + 18f, cy - 22f), strokeWidth = 3f)
+
+                val cockpit = Path().apply {
+                    moveTo(cx, cy - 20f)
+                    lineTo(cx - 6f, cy - 2f)
+                    lineTo(cx + 6f, cy - 2f)
+                    close()
+                }
+                drawPath(cockpit, color = Color(0xFFFF4500))
+            }
+        }
+    }
+}
+
+@Composable
+fun SpaceshipGarageCarousel(
+    totalCoins: Int,
+    equippedShipId: String,
+    ownedShips: Set<String>,
+    onEquipShip: (String) -> Unit,
+    onBuyShip: (String, Int) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var currentIndex by remember { mutableStateOf(SPACESHIPS_LIST.indexOfFirst { it.id == equippedShipId }.coerceAtLeast(0)) }
+    val ship = SPACESHIPS_LIST[currentIndex]
+    
+    val isOwned = ownedShips.contains(ship.id)
+    val isEquipped = ship.id == equippedShipId
+
+    var swipeOffset by remember { mutableStateOf(0f) }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "SpaceshipFloat")
+    val floatOffset by infiniteTransition.animateFloat(
+        initialValue = -8f,
+        targetValue = 8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "Float"
+    )
+    val flameScale by infiniteTransition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 1.3f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(100, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "FlameScale"
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        // Upper Carousel Area (Ship Display & Navigation)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(130.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Left Button
+            IconButton(
+                onClick = {
+                    if (currentIndex > 0) currentIndex-- else currentIndex = SPACESHIPS_LIST.size - 1
+                },
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .testTag("garage_prev_button")
+            ) {
+                Text(
+                    text = "◀",
+                    color = Color(0xFF00F0FF),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            // Ship Body Canvas Box
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .pointerInput(Unit) {
+                        detectHorizontalDragGestures(
+                            onDragEnd = {
+                                if (swipeOffset > 40f) {
+                                    if (currentIndex > 0) currentIndex-- else currentIndex = SPACESHIPS_LIST.size - 1
+                                } else if (swipeOffset < -40f) {
+                                    if (currentIndex < SPACESHIPS_LIST.size - 1) currentIndex++ else currentIndex = 0
+                                }
+                                swipeOffset = 0f
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                swipeOffset += dragAmount
+                            }
+                        )
+                    }
+                    .graphicsLayer {
+                        translationY = floatOffset
+                        rotationZ = (swipeOffset / 10f).coerceIn(-15f, 15f)
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                // Background Soft Circular Glow
+                Box(
+                    modifier = Modifier
+                        .size(90.dp)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(ship.engineColor.copy(alpha = 0.3f), Color.Transparent)
+                            )
+                        )
+                )
+
+                DrawSpaceshipCanvas(
+                    shipId = ship.id,
+                    flameScale = flameScale,
+                    modifier = Modifier.size(90.dp)
+                )
+
+                // Lock Overlay Indicator
+                if (!isOwned) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color.Black.copy(alpha = 0.65f), shape = RoundedCornerShape(50))
+                            .align(Alignment.TopEnd)
+                            .border(BorderStroke(1.dp, Color.Red), shape = RoundedCornerShape(50)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(text = "🔒", fontSize = 14.sp)
+                    }
+                }
+            }
+
+            // Right Button
+            IconButton(
+                onClick = {
+                    if (currentIndex < SPACESHIPS_LIST.size - 1) currentIndex++ else currentIndex = 0
+                },
+                modifier = Modifier
+                    .padding(end = 8.dp)
+                    .testTag("garage_next_button")
+            ) {
+                Text(
+                    text = "▶",
+                    color = Color(0xFF00F0FF),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        // Space indicators for carousel index
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(bottom = 6.dp)
+        ) {
+            SPACESHIPS_LIST.forEachIndexed { idx, item ->
+                Box(
+                    modifier = Modifier
+                        .size(if (idx == currentIndex) 10.dp else 6.dp)
+                        .background(
+                            color = if (idx == currentIndex) Color(0xFF00F0FF) else Color.White.copy(alpha = 0.3f),
+                            shape = RoundedCornerShape(50)
+                        )
+                )
+            }
+        }
+
+        // Bottom details (Name, Power, Stats & Action)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            // Ship Name
+            Text(
+                text = ship.name.uppercase(),
+                color = Color.White,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 1.sp
+            )
+
+            // Power description
+            Text(
+                text = ship.powerDesc,
+                color = if (isOwned) Color(0xFF00FFCC) else Color(0xFFFF4D4D),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
+            )
+
+            // Stat bars layout
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.9f)
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                StatProgressBar(label = "SPD", value = ship.speed, color = Color(0xFF00E5FF))
+                StatProgressBar(label = "DMG", value = ship.damage, color = Color(0xFFFF6A00))
+                StatProgressBar(label = "SHD", value = ship.shield, color = Color(0xFF39FF14))
+                StatProgressBar(label = "ROF", value = ship.fireRate, color = Color(0xFFFF00FF))
+            }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // Action Button
+            if (isEquipped) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .height(38.dp)
+                        .background(Color(0xFF39FF14).copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp))
+                        .border(BorderStroke(1.2.dp, Color(0xFF39FF14)), shape = RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "🚀 ACTIVE EQUIPPED",
+                        color = Color(0xFF39FF14),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp
+                    )
+                }
+            } else if (isOwned) {
+                Button(
+                    onClick = { onEquipShip(ship.id) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .height(38.dp)
+                        .border(BorderStroke(1.2.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(10.dp))
+                        .background(Brush.linearGradient(listOf(Color(0xFF003366), Color(0xFF0077AA))), shape = RoundedCornerShape(10.dp))
+                        .testTag("equip_ship_button")
+                ) {
+                    Text(
+                        text = "EQUIP SPACESHIP",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        letterSpacing = 1.sp
+                    )
+                }
+            } else {
+                val canAfford = totalCoins >= ship.cost
+                Button(
+                    onClick = { if (canAfford) onBuyShip(ship.id, ship.cost) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(10.dp),
+                    enabled = canAfford,
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .height(38.dp)
+                        .border(
+                            BorderStroke(1.2.dp, if (canAfford) Color(0xFFFFD700) else Color.White.copy(alpha = 0.3f)),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .background(
+                            if (canAfford) Brush.linearGradient(listOf(Color(0xFF665500), Color(0xFFCCAA00))) else Brush.linearGradient(listOf(Color(0xFF222222), Color(0xFF333333))),
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                        .testTag("buy_ship_button")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(text = "🪙 ", fontSize = 12.sp)
+                        Text(
+                            text = "UNLOCK FOR ${ship.cost} COINS",
+                            color = if (canAfford) Color.White else Color.White.copy(alpha = 0.5f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StatProgressBar(label: String, value: Float, color: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = Color.White.copy(alpha = 0.6f),
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.width(30.dp)
+        )
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(4.dp)
+                .background(Color.White.copy(alpha = 0.15f), shape = RoundedCornerShape(2.dp))
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .fillMaxWidth(value)
+                    .background(color, shape = RoundedCornerShape(2.dp))
+            )
         }
     }
 }

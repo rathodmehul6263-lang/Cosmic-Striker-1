@@ -1102,6 +1102,164 @@
             }
         }
 
+        // Active Spaceship state and modifiers
+        let activeShipId = 'falcon';
+        let shipStats = {
+            id: 'falcon',
+            speed: 0.15,
+            damageMultiplier: 1.0,
+            fireRateDelay: 250,
+            engineColor: '#ff6a00',
+            engineCoreColor: '#ffea00',
+            bulletColor: '#00f0ff',
+            shieldOnStart: false,
+            frostSubZero: false,
+            novaExplosion: false,
+            phantomStealthOnStart: false,
+            specialSpread: false
+        };
+
+        window.syncEquippedShip = function() {
+            if (window.AndroidGame && typeof window.AndroidGame.getEquippedShipId === 'function') {
+                try {
+                    activeShipId = window.AndroidGame.getEquippedShipId() || 'falcon';
+                } catch (e) {
+                    console.error("Error reading equipped ship ID from Android:", e);
+                    activeShipId = 'falcon';
+                }
+            } else {
+                activeShipId = 'falcon';
+            }
+
+            // Map stats based on active ship ID
+            if (activeShipId === 'falcon') {
+                shipStats = {
+                    id: 'falcon',
+                    speed: 0.15,
+                    damageMultiplier: 1.0,
+                    fireRateDelay: 250,
+                    engineColor: '#ff6a00',
+                    engineCoreColor: '#ffea00',
+                    bulletColor: '#00f0ff',
+                    shieldOnStart: false,
+                    frostSubZero: false,
+                    novaExplosion: false,
+                    phantomStealthOnStart: false,
+                    specialSpread: false
+                };
+            } else if (activeShipId === 'lightning') {
+                shipStats = {
+                    id: 'lightning',
+                    speed: 0.18,
+                    damageMultiplier: 1.0,
+                    fireRateDelay: 200,
+                    engineColor: '#00ffff',
+                    engineCoreColor: '#ffffff',
+                    bulletColor: '#ffd700',
+                    shieldOnStart: false,
+                    frostSubZero: false,
+                    novaExplosion: false,
+                    phantomStealthOnStart: false,
+                    specialSpread: false
+                };
+            } else if (activeShipId === 'titan') {
+                shipStats = {
+                    id: 'titan',
+                    speed: 0.12,
+                    damageMultiplier: 1.0,
+                    fireRateDelay: 280,
+                    engineColor: '#00ff00',
+                    engineCoreColor: '#e0ffe0',
+                    bulletColor: '#39ff14',
+                    shieldOnStart: true,
+                    frostSubZero: false,
+                    novaExplosion: false,
+                    phantomStealthOnStart: false,
+                    specialSpread: false
+                };
+            } else if (activeShipId === 'phoenix') {
+                shipStats = {
+                    id: 'phoenix',
+                    speed: 0.15,
+                    damageMultiplier: 2.0,
+                    fireRateDelay: 250,
+                    engineColor: '#ff4500',
+                    engineCoreColor: '#ffd700',
+                    bulletColor: '#ff0000',
+                    shieldOnStart: false,
+                    frostSubZero: false,
+                    novaExplosion: false,
+                    phantomStealthOnStart: false,
+                    specialSpread: false
+                };
+            } else if (activeShipId === 'frost') {
+                shipStats = {
+                    id: 'frost',
+                    speed: 0.16,
+                    damageMultiplier: 1.1,
+                    fireRateDelay: 250,
+                    engineColor: '#87cefa',
+                    engineCoreColor: '#ffffff',
+                    bulletColor: '#00bfff',
+                    shieldOnStart: false,
+                    frostSubZero: true,
+                    novaExplosion: false,
+                    phantomStealthOnStart: false,
+                    specialSpread: false
+                };
+            } else if (activeShipId === 'nova') {
+                shipStats = {
+                    id: 'nova',
+                    speed: 0.14,
+                    damageMultiplier: 1.3,
+                    fireRateDelay: 250,
+                    engineColor: '#8a2be2',
+                    engineCoreColor: '#ff00ff',
+                    bulletColor: '#ff00ff',
+                    shieldOnStart: false,
+                    frostSubZero: false,
+                    novaExplosion: true,
+                    phantomStealthOnStart: false,
+                    specialSpread: false
+                };
+            } else if (activeShipId === 'phantom') {
+                shipStats = {
+                    id: 'phantom',
+                    speed: 0.18,
+                    damageMultiplier: 1.1,
+                    fireRateDelay: 250,
+                    engineColor: '#4b0082',
+                    engineCoreColor: '#dda0dd',
+                    bulletColor: '#9370db',
+                    shieldOnStart: false,
+                    frostSubZero: false,
+                    novaExplosion: false,
+                    phantomStealthOnStart: true,
+                    specialSpread: false
+                };
+            } else if (activeShipId === 'cosmic') {
+                shipStats = {
+                    id: 'cosmic',
+                    speed: 0.20,
+                    damageMultiplier: 1.6,
+                    fireRateDelay: 180,
+                    engineColor: '#ff1493',
+                    engineCoreColor: '#ffea00',
+                    bulletColor: '#ffff00',
+                    shieldOnStart: true,
+                    frostSubZero: false,
+                    novaExplosion: false,
+                    phantomStealthOnStart: false,
+                    specialSpread: true
+                };
+            }
+
+            // Apply immediately to current player
+            if (player) {
+                player.speed = shipStats.speed;
+            }
+        };
+
         function drawPlayer() {
             // Blink if invulnerable
             if (player.invulnFrames > 0 && Math.floor(player.invulnFrames / 100) % 2 === 0) {
@@ -1110,9 +1268,13 @@
 
             ctx.save();
 
+            const engineColor = (shipStats && shipStats.engineColor) || '#ff6a00';
+            const engineCoreColor = (shipStats && shipStats.engineCoreColor) || '#ffea00';
+            const bulletColor = (shipStats && shipStats.bulletColor) || '#00f0ff';
+
             // Draw thruster exhaust flame
-            const flameLen = 15 + Math.random() * 12;
-            ctx.fillStyle = '#ff6a00';
+            const flameLen = (15 + Math.random() * 12) * (activeShipId === 'cosmic' ? 1.4 : 1.0);
+            ctx.fillStyle = engineColor;
             ctx.beginPath();
             ctx.moveTo(player.x - 8, player.y + player.height / 2 - 2);
             ctx.lineTo(player.x + 8, player.y + player.height / 2 - 2);
@@ -1120,8 +1282,8 @@
             ctx.closePath();
             ctx.fill();
 
-            // Inner cyan flame core
-            ctx.fillStyle = '#ffea00';
+            // Inner flame core
+            ctx.fillStyle = engineCoreColor;
             ctx.beginPath();
             ctx.moveTo(player.x - 4, player.y + player.height / 2 - 2);
             ctx.lineTo(player.x + 4, player.y + player.height / 2 - 2);
@@ -1129,35 +1291,218 @@
             ctx.closePath();
             ctx.fill();
 
-            // Outer Spaceship structure (sleek vector layout)
-            ctx.strokeStyle = '#00f0ff';
+            // Outer Spaceship structure (sleek vector layouts)
+            ctx.strokeStyle = bulletColor;
             ctx.fillStyle = '#060a26';
             ctx.lineWidth = 2.5;
 
-            // Wing glows
-            ctx.beginPath();
-            ctx.moveTo(player.x, player.y - player.height / 2); // nose tip
-            ctx.lineTo(player.x - player.width / 2, player.y + player.height / 3); // left wing tip
-            ctx.lineTo(player.x - player.width / 4, player.y + player.height / 2); // left wing rear
-            ctx.lineTo(player.x + player.width / 4, player.y + player.height / 2); // right wing rear
-            ctx.lineTo(player.x + player.width / 2, player.y + player.height / 3); // right wing tip
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
+            const cx = player.x;
+            const cy = player.y;
+            const w = player.width;
+            const h = player.height;
 
-            // Cockpit glass detailing
-            ctx.fillStyle = '#ffffff';
-            ctx.shadowColor = '#ffffff';
-            ctx.beginPath();
-            ctx.moveTo(player.x, player.y - player.height / 3);
-            ctx.lineTo(player.x - 5, player.y);
-            ctx.lineTo(player.x + 5, player.y);
-            ctx.closePath();
-            ctx.fill();
+            if (activeShipId === 'falcon') {
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 2);
+                ctx.lineTo(cx - w / 2, cy + h / 3);
+                ctx.lineTo(cx - w / 4, cy + h / 2);
+                ctx.lineTo(cx + w / 4, cy + h / 2);
+                ctx.lineTo(cx + w / 2, cy + h / 3);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 3);
+                ctx.lineTo(cx - 5, cy);
+                ctx.lineTo(cx + 5, cy);
+                ctx.closePath();
+                ctx.fill();
+            } else if (activeShipId === 'lightning') {
+                ctx.strokeStyle = '#ffd700';
+                ctx.fillStyle = '#030d1e';
+                ctx.beginPath();
+                ctx.moveTo(cx - 6, cy - h / 2);
+                ctx.lineTo(cx - 10, cy - h / 6);
+                ctx.lineTo(cx - w / 2, cy - h / 4);
+                ctx.lineTo(cx - w / 3, cy + h / 3);
+                ctx.lineTo(cx - 8, cy + h / 4);
+                ctx.lineTo(cx, cy + h / 2.2);
+                ctx.lineTo(cx + 8, cy + h / 4);
+                ctx.lineTo(cx + w / 3, cy + h / 3);
+                ctx.lineTo(cx + w / 2, cy - h / 4);
+                ctx.lineTo(cx + 10, cy - h / 6);
+                ctx.lineTo(cx + 6, cy - h / 2);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#00ffff';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 4);
+                ctx.lineTo(cx - 4, cy + 5);
+                ctx.lineTo(cx + 4, cy + 5);
+                ctx.closePath();
+                ctx.fill();
+            } else if (activeShipId === 'titan') {
+                ctx.strokeStyle = '#00ffaa';
+                ctx.fillStyle = '#041812';
+                ctx.lineWidth = 3.5;
+                ctx.beginPath();
+                ctx.moveTo(cx - 12, cy - h / 2.5);
+                ctx.lineTo(cx - 12, cy - h / 6);
+                ctx.lineTo(cx - w / 1.6, cy - h / 12);
+                ctx.lineTo(cx - w / 1.6, cy + h / 3);
+                ctx.lineTo(cx - w / 3, cy + h / 2.2);
+                ctx.lineTo(cx + w / 3, cy + h / 2.2);
+                ctx.lineTo(cx + w / 1.6, cy + h / 3);
+                ctx.lineTo(cx + w / 1.6, cy - h / 12);
+                ctx.lineTo(cx + 12, cy - h / 6);
+                ctx.lineTo(cx + 12, cy - h / 2.5);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#39ff14';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 6);
+                ctx.lineTo(cx - 8, cy + h / 6);
+                ctx.lineTo(cx + 8, cy + h / 6);
+                ctx.closePath();
+                ctx.fill();
+            } else if (activeShipId === 'phoenix') {
+                ctx.strokeStyle = '#ff4500';
+                ctx.fillStyle = '#280303';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 1.6);
+                ctx.lineTo(cx - 12, cy - h / 12);
+                ctx.lineTo(cx - w / 1.5, cy + h / 4);
+                ctx.lineTo(cx - w / 3, cy + h / 4);
+                ctx.lineTo(cx - 8, cy + h / 2);
+                ctx.lineTo(cx + 8, cy + h / 2);
+                ctx.lineTo(cx + w / 3, cy + h / 4);
+                ctx.lineTo(cx + w / 1.5, cy + h / 4);
+                ctx.lineTo(cx + 12, cy - h / 12);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffd700';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 4);
+                ctx.lineTo(cx - 5, cy + 5);
+                ctx.lineTo(cx + 5, cy + 5);
+                ctx.closePath();
+                ctx.fill();
+            } else if (activeShipId === 'frost') {
+                ctx.strokeStyle = '#00bfff';
+                ctx.fillStyle = '#011520';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 2);
+                ctx.lineTo(cx - 10, cy - h / 6);
+                ctx.lineTo(cx - w / 1.6, cy + h / 8);
+                ctx.lineTo(cx - w / 1.8, cy - h / 8);
+                ctx.lineTo(cx - 10, cy + h / 2.5);
+                ctx.lineTo(cx + 10, cy + h / 2.5);
+                ctx.lineTo(cx + w / 1.8, cy - h / 8);
+                ctx.lineTo(cx + w / 1.6, cy + h / 8);
+                ctx.lineTo(cx + 10, cy - h / 6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 4);
+                ctx.lineTo(cx - 4, cy + 3);
+                ctx.lineTo(cx + 4, cy + 3);
+                ctx.closePath();
+                ctx.fill();
+            } else if (activeShipId === 'nova') {
+                ctx.strokeStyle = '#ff00ff';
+                ctx.fillStyle = '#160120';
+                ctx.beginPath();
+                ctx.moveTo(cx - 5, cy - h / 1.6);
+                ctx.lineTo(cx - 12, cy - h / 6);
+                ctx.lineTo(cx - w / 1.5, cy + h / 3.5);
+                ctx.lineTo(cx - w / 3, cy + h / 3.5);
+                ctx.lineTo(cx, cy + h / 2);
+                ctx.lineTo(cx + w / 3, cy + h / 3.5);
+                ctx.lineTo(cx + w / 1.5, cy + h / 3.5);
+                ctx.lineTo(cx + 12, cy - h / 6);
+                ctx.lineTo(cx + 5, cy - h / 1.6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 4);
+                ctx.lineTo(cx - 5, cy + 6);
+                ctx.lineTo(cx + 5, cy + 6);
+                ctx.closePath();
+                ctx.fill();
+            } else if (activeShipId === 'phantom') {
+                ctx.strokeStyle = '#9370db';
+                ctx.fillStyle = '#0d021a';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 2.2);
+                ctx.lineTo(cx - w / 1.4, cy + h / 3.5);
+                ctx.lineTo(cx - w / 3, cy + h / 3.5);
+                ctx.lineTo(cx - 8, cy + h / 2.2);
+                ctx.lineTo(cx + 8, cy + h / 2.2);
+                ctx.lineTo(cx + w / 3, cy + h / 3.5);
+                ctx.lineTo(cx + w / 1.4, cy + h / 3.5);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#ff00ff';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 5);
+                ctx.lineTo(cx - 4, cy + 2);
+                ctx.lineTo(cx + 4, cy + 2);
+                ctx.closePath();
+                ctx.fill();
+            } else if (activeShipId === 'cosmic') {
+                ctx.strokeStyle = '#ffd700';
+                ctx.fillStyle = '#261d02';
+                ctx.lineWidth = 3.5;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 1.4);
+                ctx.lineTo(cx - 8, cy - h / 6);
+                ctx.lineTo(cx - w / 1.4, cy - h / 12);
+                ctx.lineTo(cx - w / 1.8, cy + h / 2.5);
+                ctx.lineTo(cx - 10, cy + h / 3);
+                ctx.lineTo(cx, cy + h / 2);
+                ctx.lineTo(cx + 10, cy + h / 3);
+                ctx.lineTo(cx + w / 1.8, cy + h / 2.5);
+                ctx.lineTo(cx + w / 1.4, cy - h / 12);
+                ctx.lineTo(cx + 8, cy - h / 6);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.strokeStyle = '#ff4500';
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.moveTo(cx - 18, cy - 5); ctx.lineTo(cx - 18, cy - 22);
+                ctx.moveTo(cx + 18, cy - 5); ctx.lineTo(cx + 18, cy - 22);
+                ctx.stroke();
+
+                ctx.fillStyle = '#ffd700';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - h / 3.5);
+                ctx.lineTo(cx - 6, cy - 2);
+                ctx.lineTo(cx + 6, cy - 2);
+                ctx.closePath();
+                ctx.fill();
+            }
 
             // Glowing energy shield aura if active
             if (player.hasShield) {
-                ctx.strokeStyle = '#00f0ff';
+                ctx.strokeStyle = bulletColor;
                 ctx.fillStyle = 'rgba(0, 240, 255, 0.15)';
                 ctx.lineWidth = 3;
                 ctx.beginPath();
@@ -1174,15 +1519,26 @@
             const yStart = player.y - player.height / 2;
             sound.playShoot();
             
-            if (player.shootType === 'normal') {
-                spawnBullet(player.x, yStart, -12, 0, 5, '#00f0ff');
-            } else if (player.shootType === 'double') {
-                spawnBullet(player.x - 14, yStart, -12, 0, 5, '#00f0ff');
-                spawnBullet(player.x + 14, yStart, -12, 0, 5, '#00f0ff');
-            } else if (player.shootType === 'triple') {
-                spawnBullet(player.x, yStart, -12, 0, 5, '#ff00ff');
-                spawnBullet(player.x - 12, yStart, -11.5, -2.2, 5, '#ff00ff');
-                spawnBullet(player.x + 12, yStart, -11.5, 2.2, 5, '#ff00ff');
+            if (shipStats && shipStats.specialSpread) {
+                // Cosmic Emperor legendary golden 5-way spread
+                const color = shipStats.bulletColor || '#ffff00';
+                spawnBullet(player.x, yStart, -12, 0, 6, color);
+                spawnBullet(player.x - 14, yStart, -11.5, -1.8, 5.5, color);
+                spawnBullet(player.x + 14, yStart, -11.5, 1.8, 5.5, color);
+                spawnBullet(player.x - 24, yStart, -10.5, -3.6, 5, color);
+                spawnBullet(player.x + 24, yStart, -10.5, 3.6, 5, color);
+            } else {
+                const bulletColor = (shipStats && shipStats.bulletColor) || '#00f0ff';
+                if (player.shootType === 'normal') {
+                    spawnBullet(player.x, yStart, -12, 0, 5, bulletColor);
+                } else if (player.shootType === 'double') {
+                    spawnBullet(player.x - 14, yStart, -12, 0, 5, bulletColor);
+                    spawnBullet(player.x + 14, yStart, -12, 0, 5, bulletColor);
+                } else if (player.shootType === 'triple') {
+                    spawnBullet(player.x, yStart, -12, 0, 5, '#ff00ff');
+                    spawnBullet(player.x - 12, yStart, -11.5, -2.2, 5, '#ff00ff');
+                    spawnBullet(player.x + 12, yStart, -11.5, 2.2, 5, '#ff00ff');
+                }
             }
         }
 
@@ -1742,10 +2098,14 @@
         }
 
         function updateEnemies(dt) {
+            let enemyDt = dt;
+            if (shipStats && shipStats.frostSubZero) {
+                enemyDt = dt * 0.8; // Enemies move, shoot, and act 20% slower!
+            }
             for (let i = 0; i < enemies.length; i++) {
                 const enemy = enemies[i];
                 if (!enemy.active) continue;
-                if (enemy.update(dt)) {
+                if (enemy.update(enemyDt)) {
                     enemy.active = false;
                 }
             }
@@ -1777,12 +2137,32 @@
                     if (dist < collisionDist) {
                         bullet.active = false;
                         
-                        enemy.hp--;
+                        const dmg = (shipStats && shipStats.damageMultiplier) ? shipStats.damageMultiplier : 1;
+                        enemy.hp -= dmg;
                         if (enemy.hp <= 0) {
                             enemy.active = false;
                             spawnExplosion(enemy.x, enemy.y, enemy.color, 16);
                             score += enemy.scoreVal;
                             scoreDisplay.textContent = String(score).padStart(5, '0');
+
+                            // Nova Destroyer splash damage
+                            if (shipStats && shipStats.novaExplosion) {
+                                for (let otherIdx = 0; otherIdx < enemies.length; otherIdx++) {
+                                    const otherEnemy = enemies[otherIdx];
+                                    if (otherEnemy.active && otherEnemy !== enemy) {
+                                        const distToSplash = Math.hypot(enemy.x - otherEnemy.x, enemy.y - otherEnemy.y);
+                                        if (distToSplash < 100) {
+                                            otherEnemy.hp -= 1; // splash damage
+                                            spawnExplosion(otherEnemy.x, otherEnemy.y, '#ff00ff', 4);
+                                            if (otherEnemy.hp <= 0) {
+                                                otherEnemy.active = false;
+                                                score += otherEnemy.scoreVal;
+                                                scoreDisplay.textContent = String(score).padStart(5, '0');
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             
                             // Progression Check (Normal playing state progression)
                             if (levelState === 'PLAYING') {
@@ -1830,7 +2210,8 @@
 
                     if (dist < collisionDist) {
                         bullet.active = false;
-                        activeBoss.hp--;
+                        const dmg = (shipStats && shipStats.damageMultiplier) ? shipStats.damageMultiplier : 1;
+                        activeBoss.hp -= dmg;
                         sound.playHurt();
 
                         // Update Boss HUD display
@@ -2074,6 +2455,9 @@
             bossIncomingTimer = 0;
             runCoins = 0;
             
+            // Sync equipped spaceship state
+            syncEquippedShip();
+            
             // Reset player states
             player.x = canvas.width / 2;
             player.y = canvas.height * 0.8;
@@ -2085,6 +2469,16 @@
             player.hasShield = false;
             player.shootType = 'normal';
             player.powerupTime = 0;
+
+            // Apply special starting bonuses from selected spaceship
+            if (shipStats) {
+                if (shipStats.shieldOnStart) {
+                    player.hasShield = true;
+                }
+                if (shipStats.phantomStealthOnStart) {
+                    player.invulnFrames = 5000; // 5 seconds of absolute protective invincibility
+                }
+            }
             
             lives = 3;
             bullets = [];
@@ -2259,7 +2653,8 @@
                     updatePlayer(dt);
 
                     // Shoot bullets automatically
-                    const currentCooldown = player.hasRapidFire ? BULLET_COOLDOWN / 2 : BULLET_COOLDOWN;
+                    let baseCooldown = (shipStats && shipStats.fireRateDelay) ? shipStats.fireRateDelay : BULLET_COOLDOWN;
+                    const currentCooldown = player.hasRapidFire ? baseCooldown / 2 : baseCooldown;
                     if (timestamp - lastShotTime >= currentCooldown) {
                         fireBullet();
                         lastShotTime = timestamp;
@@ -2389,6 +2784,11 @@
         if (window.AndroidGame && typeof window.AndroidGame.getTotalCoins === 'function') {
             totalCoins = window.AndroidGame.getTotalCoins();
             updateCoinsHUD();
+        }
+        
+        // Sync selected spaceship initially
+        if (typeof window.syncEquippedShip === 'function') {
+            window.syncEquippedShip();
         }
     </script>
 </body>
