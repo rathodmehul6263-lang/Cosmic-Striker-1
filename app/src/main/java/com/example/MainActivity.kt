@@ -2,6 +2,7 @@ package com.example
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.widget.Toast
 import android.os.Build
 import android.os.Bundle
 import android.os.Vibrator
@@ -127,9 +128,13 @@ class MainActivity : ComponentActivity() {
 
     fun getOwnedShips(): Set<String> = ownedShipsState
     fun setOwnedShips(ships: Set<String>) {
-        ownedShipsState = ships
+        ownedShipsState = ships.toSet()
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
-        prefs.edit().putStringSet("owned_ships", ships).apply()
+        val csv = ships.joinToString(",")
+        prefs.edit()
+            .putString("owned_ships_csv", csv)
+            .putStringSet("owned_ships", ships)
+            .apply()
     }
 
     // Sound, Music, Vibration, Pause states
@@ -213,7 +218,12 @@ class MainActivity : ComponentActivity() {
         selectedLevel = highestLevelState
 
         equippedShipIdState = prefs.getString("equipped_ship_id", "falcon") ?: "falcon"
-        ownedShipsState = prefs.getStringSet("owned_ships", setOf("falcon")) ?: setOf("falcon")
+        val ownedShipsStr = prefs.getString("owned_ships_csv", null)
+        ownedShipsState = if (ownedShipsStr != null) {
+            ownedShipsStr.split(",").filter { it.isNotEmpty() }.toSet()
+        } else {
+            prefs.getStringSet("owned_ships", setOf("falcon")) ?: setOf("falcon")
+        }
 
         // Hide Android System Bars (Status and Navigation) to provide true immersive arcade view
         window.decorView.systemUiVisibility = (
@@ -305,12 +315,19 @@ class MainActivity : ComponentActivity() {
                                     ownedShips = ownedShipsState,
                                     onEquipShip = { shipId ->
                                         setEquippedShipId(shipId)
+                                        playClickSound()
+                                        val shipName = SPACESHIPS_LIST.find { it.id == shipId }?.name ?: "Spaceship"
+                                        Toast.makeText(this@MainActivity, "$shipName equipped!", Toast.LENGTH_SHORT).show()
                                     },
                                     onBuyShip = { shipId, cost ->
                                         if (totalCoinsState >= cost) {
                                             setTotalCoins(totalCoinsState - cost)
                                             setOwnedShips(ownedShipsState + shipId)
                                             playClickSound()
+                                            val shipName = SPACESHIPS_LIST.find { it.id == shipId }?.name ?: "Spaceship"
+                                            Toast.makeText(this@MainActivity, "$shipName purchased successfully!", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            Toast.makeText(this@MainActivity, "Not enough coins! Play levels to earn more.", Toast.LENGTH_SHORT).show()
                                         }
                                     }
                                 )
@@ -2811,7 +2828,7 @@ fun SpaceshipGarageCarousel(
                         .testTag("equip_ship_button")
                 ) {
                     Text(
-                        text = "EQUIP SPACESHIP",
+                        text = "EQUIP",
                         color = Color.White,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.ExtraBold,
@@ -2821,20 +2838,19 @@ fun SpaceshipGarageCarousel(
             } else {
                 val canAfford = totalCoins >= ship.cost
                 Button(
-                    onClick = { if (canAfford) onBuyShip(ship.id, ship.cost) },
+                    onClick = { onBuyShip(ship.id, ship.cost) },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                     contentPadding = PaddingValues(),
                     shape = RoundedCornerShape(10.dp),
-                    enabled = canAfford,
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
                         .height(38.dp)
                         .border(
-                            BorderStroke(1.2.dp, if (canAfford) Color(0xFFFFD700) else Color.White.copy(alpha = 0.3f)),
+                            BorderStroke(1.2.dp, if (canAfford) Color(0xFFFFD700) else Color(0xFFFF4D4D)),
                             shape = RoundedCornerShape(10.dp)
                         )
                         .background(
-                            if (canAfford) Brush.linearGradient(listOf(Color(0xFF665500), Color(0xFFCCAA00))) else Brush.linearGradient(listOf(Color(0xFF222222), Color(0xFF333333))),
+                            if (canAfford) Brush.linearGradient(listOf(Color(0xFF665500), Color(0xFFCCAA00))) else Brush.linearGradient(listOf(Color(0xFF441111), Color(0xFF661111))),
                             shape = RoundedCornerShape(10.dp)
                         )
                         .testTag("buy_ship_button")
@@ -2845,8 +2861,8 @@ fun SpaceshipGarageCarousel(
                     ) {
                         Text(text = "🪙 ", fontSize = 12.sp)
                         Text(
-                            text = "UNLOCK FOR ${ship.cost} COINS",
-                            color = if (canAfford) Color.White else Color.White.copy(alpha = 0.5f),
+                            text = "BUY FOR ${ship.cost} COINS",
+                            color = Color.White,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
                             letterSpacing = 1.sp
