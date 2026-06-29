@@ -306,6 +306,22 @@ class MainActivity : ComponentActivity() {
             )
         }
         
+        try {
+            com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
+        } catch (e: Exception) {
+            Log.e("Auth", "Firebase signOut error", e)
+        }
+        try {
+            AuthManager.googleSignInClient.signOut()
+        } catch (e: Exception) {
+            Log.e("Auth", "Google signOut error", e)
+        }
+        try {
+            com.facebook.login.LoginManager.getInstance().logOut()
+        } catch (e: Exception) {
+            Log.e("Auth", "Facebook logOut error", e)
+        }
+
         AuthManager.clearSession(this)
         
         // Restore local Guest settings
@@ -330,15 +346,7 @@ class MainActivity : ComponentActivity() {
             startActivityForResult(signInIntent, RC_SIGN_IN)
         } catch (e: Exception) {
             Log.e("Auth", "Failed to start Google sign in intent", e)
-            Toast.makeText(this, "Google Sign-In initialization failed. Using Sandbox fallback.", Toast.LENGTH_LONG).show()
-            val userProfile = UserProfile(
-                id = "google_test_pilot",
-                name = "Test Google Pilot",
-                email = "test.pilot@gmail.com",
-                photoUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
-                provider = "Google"
-            )
-            handleLoginSuccess(userProfile)
+            Toast.makeText(this, "Google Sign-In initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -350,15 +358,7 @@ class MainActivity : ComponentActivity() {
             )
         } catch (e: Exception) {
             Log.e("Auth", "Failed to start Facebook login", e)
-            Toast.makeText(this, "Facebook Login initialization failed. Using Sandbox fallback.", Toast.LENGTH_LONG).show()
-            val userProfile = UserProfile(
-                id = "facebook_test_pilot",
-                name = "Test Facebook Pilot",
-                email = "fb.pilot@facebook.com",
-                photoUrl = "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80",
-                provider = "Facebook"
-            )
-            handleLoginSuccess(userProfile)
+            Toast.makeText(this, "Facebook Login initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -379,31 +379,37 @@ class MainActivity : ComponentActivity() {
     private fun handleGoogleSignInResult(completedTask: com.google.android.gms.tasks.Task<com.google.android.gms.auth.api.signin.GoogleSignInAccount>) {
         try {
             val account = completedTask.getResult(ApiException::class.java)
-            if (account != null) {
-                val userProfile = UserProfile(
-                    id = account.id ?: "g_user_${System.currentTimeMillis()}",
-                    name = account.displayName ?: "Google Pilot",
-                    email = account.email ?: "pilot@gmail.com",
-                    photoUrl = account.photoUrl?.toString() ?: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
-                    provider = "Google"
-                )
-                handleLoginSuccess(userProfile)
+            val idToken = account?.idToken
+            if (idToken != null) {
+                val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+                com.google.firebase.auth.FirebaseAuth.getInstance().signInWithCredential(credential)
+                    .addOnCompleteListener { authTask ->
+                        if (authTask.isSuccessful) {
+                            val firebaseUser = authTask.result?.user
+                            if (firebaseUser != null) {
+                                val userProfile = UserProfile(
+                                    id = firebaseUser.uid,
+                                    name = firebaseUser.displayName ?: account.displayName ?: "Google User",
+                                    email = firebaseUser.email ?: account.email ?: "",
+                                    photoUrl = firebaseUser.photoUrl?.toString() ?: account.photoUrl?.toString() ?: "",
+                                    provider = "Google"
+                                )
+                                handleLoginSuccess(userProfile)
+                            } else {
+                                Toast.makeText(this, "Google sign-in succeeded, but User is null.", Toast.LENGTH_LONG).show()
+                            }
+                        } else {
+                            Log.e("Auth", "Firebase Google Sign-In failed", authTask.exception)
+                            Toast.makeText(this, "Firebase Google login failed: ${authTask.exception?.message}", Toast.LENGTH_LONG).show()
+                        }
+                    }
             } else {
-                throw Exception("Google account is null")
+                Toast.makeText(this, "Google Sign-In failed: No ID Token retrieved.", Toast.LENGTH_LONG).show()
             }
         } catch (e: Exception) {
             val statusCode = (e as? ApiException)?.statusCode ?: -1
-            Log.e("Auth", "Google sign_in failed: code=" + statusCode)
-            Toast.makeText(this, "Google Sign-In failed: code=$statusCode. Using Sandbox profile.", Toast.LENGTH_LONG).show()
-            
-            val userProfile = UserProfile(
-                id = "google_test_pilot",
-                name = "Test Google Pilot",
-                email = "test.pilot@gmail.com",
-                photoUrl = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&q=80",
-                provider = "Google"
-            )
-            handleLoginSuccess(userProfile)
+            Log.e("Auth", "Google sign_in failed: code=" + statusCode, e)
+            Toast.makeText(this, "Google Sign-In failed: code=$statusCode (${e.message})", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -445,14 +451,49 @@ class MainActivity : ComponentActivity() {
                 AuthManager.callbackManager,
                 object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
                     override fun onSuccess(result: com.facebook.login.LoginResult) {
-                        val userProfile = UserProfile(
-                            id = result.accessToken?.userId ?: "fb_user_${System.currentTimeMillis()}",
-                            name = "Starfighter Jax",
-                            email = "jax.striker@galaxy.net",
-                            photoUrl = "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80",
-                            provider = "Facebook"
-                        )
-                        handleLoginSuccess(userProfile)
+                        val token = result.accessToken?.token
+                        if (token != null) {
+                            val request = com.facebook.GraphRequest.newMeRequest(result.accessToken) { obj, response ->
+                                try {
+                                    val id = obj?.optString("id") ?: "fb_user_${System.currentTimeMillis()}"
+                                    val name = obj?.optString("name") ?: "Facebook User"
+                                    val email = obj?.optString("email") ?: ""
+                                    val photoUrl = "https://graph.facebook.com/$id/picture?type=large"
+                                    
+                                    val credential = com.google.firebase.auth.FacebookAuthProvider.getCredential(token)
+                                    com.google.firebase.auth.FirebaseAuth.getInstance().signInWithCredential(credential)
+                                        .addOnCompleteListener { authTask ->
+                                            if (authTask.isSuccessful) {
+                                                val firebaseUser = authTask.result?.user
+                                                if (firebaseUser != null) {
+                                                    val userProfile = UserProfile(
+                                                        id = firebaseUser.uid,
+                                                        name = firebaseUser.displayName ?: name,
+                                                        email = firebaseUser.email ?: email,
+                                                        photoUrl = firebaseUser.photoUrl?.toString() ?: photoUrl,
+                                                        provider = "Facebook"
+                                                    )
+                                                    handleLoginSuccess(userProfile)
+                                                } else {
+                                                    Toast.makeText(this@MainActivity, "Facebook sign-in succeeded, but User is null.", Toast.LENGTH_LONG).show()
+                                                }
+                                            } else {
+                                                Log.e("Auth", "Firebase Facebook Sign-In failed", authTask.exception)
+                                                Toast.makeText(this@MainActivity, "Firebase Facebook login failed: ${authTask.exception?.message}", Toast.LENGTH_LONG).show()
+                                            }
+                                        }
+                                } catch (e: Exception) {
+                                    Log.e("Auth", "Facebook GraphRequest parsing error", e)
+                                    Toast.makeText(this@MainActivity, "Failed to retrieve Facebook profile details.", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            val parameters = android.os.Bundle()
+                            parameters.putString("fields", "id,name,email")
+                            request.parameters = parameters
+                            request.executeAsync()
+                        } else {
+                            Toast.makeText(this@MainActivity, "Facebook login failed: Token is null", Toast.LENGTH_SHORT).show()
+                        }
                     }
 
                     override fun onCancel() {
@@ -461,15 +502,7 @@ class MainActivity : ComponentActivity() {
 
                     override fun onError(error: com.facebook.FacebookException) {
                         Log.e("Auth", "Facebook login error", error)
-                        Toast.makeText(this@MainActivity, "Facebook Login failed. Using Sandbox fallback.", Toast.LENGTH_LONG).show()
-                        val userProfile = UserProfile(
-                            id = "facebook_test_pilot",
-                            name = "Test Facebook Pilot",
-                            email = "fb.pilot@facebook.com",
-                            photoUrl = "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&w=150&q=80",
-                            provider = "Facebook"
-                        )
-                        handleLoginSuccess(userProfile)
+                        Toast.makeText(this@MainActivity, "Facebook Login failed: ${error.message}", Toast.LENGTH_LONG).show()
                     }
                 }
             )
@@ -791,7 +824,12 @@ class MainActivity : ComponentActivity() {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
-                WebView(ctx).apply {
+                val webViewContext = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                    ctx.createAttributionContext("default")
+                } else {
+                    ctx
+                }
+                WebView(webViewContext).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
