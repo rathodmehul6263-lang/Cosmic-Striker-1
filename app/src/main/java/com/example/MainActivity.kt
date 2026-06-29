@@ -61,6 +61,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import com.example.ui.theme.MyApplicationTheme
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -2607,6 +2609,28 @@ fun SpaceshipGarageCarousel(
     val isOwned = ownedShips.contains(ship.id)
     val isEquipped = ship.id == equippedShipId
 
+    val scope = rememberCoroutineScope()
+    var insufficientCoinsErrorShipId by remember { mutableStateOf<String?>(null) }
+    var shakeTrigger by remember { mutableStateOf(0) }
+    
+    val shakeOffset by animateDpAsState(
+        targetValue = if (insufficientCoinsErrorShipId == ship.id) {
+            when (shakeTrigger) {
+                1 -> (-10).dp
+                2 -> 10.dp
+                3 -> (-8).dp
+                4 -> 8.dp
+                5 -> (-4).dp
+                6 -> 4.dp
+                else -> 0.dp
+            }
+        } else {
+            0.dp
+        },
+        animationSpec = spring(dampingRatio = 0.25f, stiffness = 1200f),
+        label = "Shake"
+    )
+
     var swipeOffset by remember { mutableStateOf(0f) }
 
     val infiniteTransition = rememberInfiniteTransition(label = "SpaceshipFloat")
@@ -2771,6 +2795,60 @@ fun SpaceshipGarageCarousel(
                 letterSpacing = 1.sp
             )
 
+            // Ownership / Price Badge
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+            ) {
+                if (isEquipped) {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF39FF14).copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp))
+                            .border(BorderStroke(1.dp, Color(0xFF39FF14)), shape = RoundedCornerShape(4.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "EQUIPPED",
+                            color = Color(0xFF39FF14),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                } else if (isOwned) {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFF00F0FF).copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp))
+                            .border(BorderStroke(1.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(4.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "OWNED",
+                            color = Color(0xFF00F0FF),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0xFFFFD700).copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp))
+                            .border(BorderStroke(1.dp, Color(0xFFFFD700)), shape = RoundedCornerShape(4.dp))
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "${ship.cost} COINS",
+                            color = Color(0xFFFFD700),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+            }
+
             // Power description
             Text(
                 text = ship.powerDesc,
@@ -2778,7 +2856,7 @@ fun SpaceshipGarageCarousel(
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
-                modifier = Modifier.padding(top = 2.dp, bottom = 4.dp)
+                modifier = Modifier.padding(bottom = 4.dp)
             )
 
             // Stat bars layout
@@ -2794,22 +2872,37 @@ fun SpaceshipGarageCarousel(
                 StatProgressBar(label = "ROF", value = ship.fireRate, color = Color(0xFFFF00FF))
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
+
+            // Animated "Not enough coins" message above the button
+            AnimatedVisibility(
+                visible = insufficientCoinsErrorShipId == ship.id,
+                enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 }),
+                exit = fadeOut() + slideOutVertically(targetOffsetY = { it / 2 })
+            ) {
+                Text(
+                    text = "Not enough coins!",
+                    color = Color(0xFFFF4D4D),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+            }
 
             // Action Button
             if (isEquipped) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
-                        .height(38.dp)
+                        .height(44.dp)
                         .background(Color(0xFF39FF14).copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp))
                         .border(BorderStroke(1.2.dp, Color(0xFF39FF14)), shape = RoundedCornerShape(10.dp)),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "🚀 ACTIVE EQUIPPED",
+                        text = "🚀 EQUIPPED",
                         color = Color(0xFF39FF14),
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 1.sp
                     )
@@ -2822,7 +2915,7 @@ fun SpaceshipGarageCarousel(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
-                        .height(38.dp)
+                        .height(44.dp)
                         .border(BorderStroke(1.2.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(10.dp))
                         .background(Brush.linearGradient(listOf(Color(0xFF003366), Color(0xFF0077AA))), shape = RoundedCornerShape(10.dp))
                         .testTag("equip_ship_button")
@@ -2830,27 +2923,52 @@ fun SpaceshipGarageCarousel(
                     Text(
                         text = "EQUIP",
                         color = Color.White,
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 1.sp
                     )
                 }
             } else {
                 val canAfford = totalCoins >= ship.cost
+                val isErrorActive = insufficientCoinsErrorShipId == ship.id
+                
                 Button(
-                    onClick = { onBuyShip(ship.id, ship.cost) },
+                    onClick = {
+                        if (canAfford) {
+                            onBuyShip(ship.id, ship.cost)
+                        } else {
+                            scope.launch {
+                                insufficientCoinsErrorShipId = ship.id
+                                for (i in 1..6) {
+                                    shakeTrigger = i
+                                    delay(60)
+                                }
+                                shakeTrigger = 0
+                                delay(1500)
+                                insufficientCoinsErrorShipId = null
+                            }
+                        }
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                     contentPadding = PaddingValues(),
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
-                        .height(38.dp)
+                        .height(44.dp)
+                        .offset(x = shakeOffset)
                         .border(
-                            BorderStroke(1.2.dp, if (canAfford) Color(0xFFFFD700) else Color(0xFFFF4D4D)),
+                            BorderStroke(
+                                1.2.dp,
+                                if (isErrorActive) Color(0xFFFF3333)
+                                else if (canAfford) Color(0xFFFFD700)
+                                else Color(0xFFFF4D4D)
+                            ),
                             shape = RoundedCornerShape(10.dp)
                         )
                         .background(
-                            if (canAfford) Brush.linearGradient(listOf(Color(0xFF665500), Color(0xFFCCAA00))) else Brush.linearGradient(listOf(Color(0xFF441111), Color(0xFF661111))),
+                            if (isErrorActive) Brush.linearGradient(listOf(Color(0xFF881111), Color(0xFFBB1111)))
+                            else if (canAfford) Brush.linearGradient(listOf(Color(0xFF665500), Color(0xFFCCAA00)))
+                            else Brush.linearGradient(listOf(Color(0xFF441111), Color(0xFF661111))),
                             shape = RoundedCornerShape(10.dp)
                         )
                         .testTag("buy_ship_button")
@@ -2859,14 +2977,25 @@ fun SpaceshipGarageCarousel(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center
                     ) {
-                        Text(text = "🪙 ", fontSize = 12.sp)
-                        Text(
-                            text = "BUY FOR ${ship.cost} COINS",
-                            color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 1.sp
-                        )
+                        if (isErrorActive) {
+                            Text(
+                                text = "❌ NOT ENOUGH COINS",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 1.sp
+                            )
+                        } else {
+                            Text(text = "🪙 ", fontSize = 13.sp)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "BUY FOR ${ship.cost} COINS",
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 1.sp
+                            )
+                        }
                     }
                 }
             }
