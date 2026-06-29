@@ -60,6 +60,8 @@ import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.CircleShape
+import coil.compose.AsyncImage
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -143,6 +145,11 @@ class MainActivity : ComponentActivity() {
     private var isPaused by mutableStateOf(false)
     private var showSettingsDialog by mutableStateOf(false)
     
+    // Authentication & Reward states
+    private var showAuthWelcomeScreen by mutableStateOf(false)
+    private var showBonusPopup by mutableStateOf(false)
+    private var showProfileDialog by mutableStateOf(false)
+    
     private var soundEffectsEnabledState by mutableStateOf(true)
     private var musicEnabledState by mutableStateOf(true)
     private var vibrationEnabledState by mutableStateOf(true)
@@ -196,6 +203,72 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    fun handleLoginSuccess(profile: UserProfile) {
+        val earnedBonus = AuthManager.checkAndRewardBonus(this, profile.id)
+        if (earnedBonus) {
+            val newCoins = totalCoinsState + 200
+            setTotalCoins(newCoins)
+            AuthManager.saveAccountProgress(
+                context = this,
+                userId = profile.id,
+                coins = newCoins,
+                level = highestLevelState,
+                equippedShip = equippedShipIdState,
+                ownedShips = ownedShipsState
+            )
+            showBonusPopup = true
+        }
+        
+        AuthManager.syncAccountProgress(
+            context = this,
+            userId = profile.id,
+            currentCoins = totalCoinsState,
+            currentLevel = highestLevelState,
+            currentEquippedShip = equippedShipIdState,
+            currentOwnedShips = ownedShipsState
+        ) { coins, level, equippedShip, ownedShips ->
+            totalCoinsState = coins
+            highestLevelState = level
+            equippedShipIdState = equippedShip
+            ownedShipsState = ownedShips
+            selectedLevel = level
+        }
+        
+        AuthManager.saveSession(this, profile)
+        Toast.makeText(this, "Logged in as ${profile.name}!", Toast.LENGTH_LONG).show()
+    }
+
+    fun handleLogout() {
+        val activeUser = AuthManager.currentUser
+        if (activeUser != null) {
+            AuthManager.saveAccountProgress(
+                context = this,
+                userId = activeUser.id,
+                coins = totalCoinsState,
+                level = highestLevelState,
+                equippedShip = equippedShipIdState,
+                ownedShips = ownedShipsState
+            )
+        }
+        
+        AuthManager.clearSession(this)
+        
+        // Restore local Guest settings
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        totalCoinsState = prefs.getInt("total_coins", 0)
+        highestLevelState = prefs.getInt("highest_unlocked_level", 1)
+        equippedShipIdState = prefs.getString("equipped_ship_id", "falcon") ?: "falcon"
+        val ownedStr = prefs.getString("owned_ships_csv", null)
+        ownedShipsState = if (ownedStr != null) {
+            ownedStr.split(",").filter { it.isNotEmpty() }.toSet()
+        } else {
+            setOf("falcon")
+        }
+        selectedLevel = highestLevelState
+        
+        Toast.makeText(this, "Logged out", Toast.LENGTH_SHORT).show()
+    }
+
     fun playClickSound() {
         webView?.post {
             webView?.evaluateJavascript("sound.playClick()", null)
@@ -225,6 +298,28 @@ class MainActivity : ComponentActivity() {
             ownedShipsStr.split(",").filter { it.isNotEmpty() }.toSet()
         } else {
             prefs.getStringSet("owned_ships", setOf("falcon")) ?: setOf("falcon")
+        }
+
+        // Initialize AuthManager & load active user progress if signed in
+        AuthManager.init(this)
+        val activeUser = AuthManager.currentUser
+        if (activeUser != null) {
+            AuthManager.syncAccountProgress(
+                context = this,
+                userId = activeUser.id,
+                currentCoins = totalCoinsState,
+                currentLevel = highestLevelState,
+                currentEquippedShip = equippedShipIdState,
+                currentOwnedShips = ownedShipsState
+            ) { coins, level, equippedShip, ownedShips ->
+                totalCoinsState = coins
+                highestLevelState = level
+                equippedShipIdState = equippedShip
+                ownedShipsState = ownedShips
+                selectedLevel = level
+            }
+        } else {
+            showAuthWelcomeScreen = true
         }
 
         // Hide Android System Bars (Status and Navigation) to provide true immersive arcade view
@@ -305,6 +400,10 @@ class MainActivity : ComponentActivity() {
                                     onSettingsClick = {
                                         playClickSound()
                                         showSettingsDialog = true
+                                    },
+                                    onProfileClick = {
+                                        playClickSound()
+                                        showProfileDialog = true
                                     },
                                     soundEnabled = soundEffectsEnabledState && musicEnabledState,
                                     onSoundToggled = { enabled ->
@@ -448,7 +547,55 @@ class MainActivity : ComponentActivity() {
                                 vibrationEnabled = vibrationEnabledState,
                                 onVibrationChanged = { setVibrationEnabled(it) },
                                 onClose = { showSettingsDialog = false },
-                                playClick = { playClickSound() }
+                                playClick = { playClickSound() },
+                                onProfileClick = {
+                                    playClickSound()
+                                    showSettingsDialog = false
+                                    showProfileDialog = true
+                                }
+                            )
+                        }
+
+                        // Auth Welcome Screen for first launches
+                        if (showAuthWelcomeScreen) {
+                            AuthWelcomeOverlay(
+                                onLoginSuccess = { profile ->
+                                    handleLoginSuccess(profile)
+                                    showAuthWelcomeScreen = false
+                                },
+                                onPlayAsGuest = {
+                                    playClickSound()
+                                    showAuthWelcomeScreen = false
+                                }
+                            )
+                        }
+
+                        // Profile details view (Logout and Sync stats)
+                        if (showProfileDialog) {
+                            ProfileDialog(
+                                onLogout = {
+                                    handleLogout()
+                                    showProfileDialog = false
+                                },
+                                onClose = {
+                                    playClickSound()
+                                    showProfileDialog = false
+                                },
+                                onTriggerLogin = {
+                                    playClickSound()
+                                    showProfileDialog = false
+                                    showAuthWelcomeScreen = true
+                                }
+                            )
+                        }
+
+                        // 200 Coin bonus celebration popup
+                        if (showBonusPopup) {
+                            BonusCoinsPopup(
+                                onCollect = {
+                                    playClickSound()
+                                    showBonusPopup = false
+                                }
                             )
                         }
                     }
@@ -1043,6 +1190,7 @@ fun MainMenuOverlay(
     onLevelSelected: (Int) -> Unit,
     onLaunchMission: () -> Unit,
     onSettingsClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {},
     soundEnabled: Boolean,
     onSoundToggled: (Boolean) -> Unit,
     equippedShipId: String,
@@ -1083,33 +1231,88 @@ fun MainMenuOverlay(
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             
-            // 1. TOP STATUS BAR (Coins indicators, etc.)
+            // 1. TOP STATUS BAR (Profile, Coins, etc.)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 16.dp),
-                horizontalArrangement = Arrangement.Center,
+                    .padding(top = 16.dp, start = 8.dp, end = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Left: Interactive Profile Avatar Button
+                val activeUser = AuthManager.currentUser
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clickable { onProfileClick() }
+                        .background(Color(0xFF0C1033).copy(alpha = 0.85f), shape = RoundedCornerShape(12.dp))
+                        .border(
+                            BorderStroke(
+                                1.2.dp,
+                                if (activeUser != null) Color(0xFF00F0FF) else Color(0xFFFF0080)
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    if (activeUser != null) {
+                        AsyncImage(
+                            model = activeUser.photoUrl,
+                            contentDescription = "Profile",
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .border(1.dp, Color(0xFF00F0FF), CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = activeUser.name.split(" ").firstOrNull() ?: "Pilot",
+                            color = Color.White,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .background(Color(0xFF1E293B), shape = CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("👤", fontSize = 11.sp)
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "GUEST",
+                            color = Color(0xFFFF0080),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.sp
+                        )
+                    }
+                }
+
+                // Right: Coins Indicator
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .background(Color(0xFFFFD700).copy(alpha = 0.12f), shape = RoundedCornerShape(14.dp))
                         .border(BorderStroke(1.2.dp, Brush.linearGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))), shape = RoundedCornerShape(14.dp))
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
                 ) {
-                    Text(text = "🪙 ", fontSize = 15.sp)
+                    Text(text = "🪙 ", fontSize = 14.sp)
                     Text(
-                        text = "TOTAL COINS: ",
+                        text = "COINS: ",
                         color = Color(0xFFFFD700),
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
                         text = String.format("%04d", totalCoins),
                         color = Color.White,
-                        fontSize = 14.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace
                     )
@@ -1942,7 +2145,8 @@ fun SettingsDialog(
     vibrationEnabled: Boolean,
     onVibrationChanged: (Boolean) -> Unit,
     onClose: () -> Unit,
-    playClick: () -> Unit
+    playClick: () -> Unit,
+    onProfileClick: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onClose,
@@ -1970,6 +2174,82 @@ fun SettingsDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                // Profile Section at top of settings
+                val activeUser = AuthManager.currentUser
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0x3F00F0FF).copy(alpha = 0.08f), shape = RoundedCornerShape(10.dp))
+                        .border(BorderStroke(1.dp, Color(0xFF00F0FF).copy(alpha = 0.3f)), shape = RoundedCornerShape(10.dp))
+                        .clickable { onProfileClick() }
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (activeUser != null) {
+                            AsyncImage(
+                                model = activeUser.photoUrl,
+                                contentDescription = "Profile",
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .border(1.2.dp, Color(0xFF00F0FF), CircleShape)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = activeUser.name,
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.SansSerif
+                                )
+                                Text(
+                                    text = "Synced via ${activeUser.provider}",
+                                    color = Color(0xFF00F0FF),
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color(0xFF1E293B), shape = CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("👤", fontSize = 16.sp)
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "GUEST PILOT",
+                                    color = Color.White,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.SansSerif
+                                )
+                                Text(
+                                    text = "Progress not synced",
+                                    color = Color(0xFFFF0080),
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                    }
+
+                    // Action Button Text
+                    Text(
+                        text = if (activeUser != null) "VIEW PROFILE ➔" else "SYNC PROGRESS ➔",
+                        color = if (activeUser != null) Color(0xFF00F0FF) else Color(0xFFFF0080),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
                 // Sound Effects Toggle
                 Row(
                     modifier = Modifier
@@ -3073,4 +3353,479 @@ fun StatProgressBar(label: String, value: Float, color: Color) {
             )
         }
     }
+}
+
+@Composable
+fun AuthWelcomeOverlay(
+    onLoginSuccess: (UserProfile) -> Unit,
+    onPlayAsGuest: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xE603030F)),
+        contentAlignment = Alignment.Center
+    ) {
+        StarfieldBackground()
+        ParticleDustBackground()
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .background(Color(0xFA0B0F2F), shape = RoundedCornerShape(16.dp))
+                .border(
+                    BorderStroke(1.5.dp, Brush.horizontalGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080)))),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            // Neon Glow Header
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "PILOT SYNC TERMINAL",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    letterSpacing = 2.sp,
+                    fontFamily = FontFamily.SansSerif
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Link your pilot account to secure stats & progress",
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    fontFamily = FontFamily.SansSerif
+                )
+            }
+
+            // Reward Badge
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFFFFD700).copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp))
+                    .border(BorderStroke(1.dp, Color(0xFFFFD700)), shape = RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "🎁 FIRST SYNC BONUS: 🪙 200 COINS!",
+                    color = Color(0xFFFFD700),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
+            // Google Sign In Button
+            Button(
+                onClick = {
+                    val googleProfiles = AuthManager.googleSimulationProfiles
+                    onLoginSuccess(googleProfiles.first())
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .testTag("google_login_button")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text("G ", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEA4335))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "SIGN IN WITH GOOGLE",
+                        color = Color(0xFF1E293B),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.SansSerif
+                    )
+                }
+            }
+
+            // Facebook Sign In Button
+            Button(
+                onClick = {
+                    val fbProfiles = AuthManager.facebookSimulationProfiles
+                    onLoginSuccess(fbProfiles.first())
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1877F2)),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .testTag("facebook_login_button")
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text("f ", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "SIGN IN WITH FACEBOOK",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.SansSerif
+                    )
+                }
+            }
+
+            // Alternative selector terminals (Predefined interactive accounts)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0x22000000), shape = RoundedCornerShape(10.dp))
+                    .border(BorderStroke(1.dp, Color(0x3300F0FF)), shape = RoundedCornerShape(10.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "SELECT CHOOSE-YOUR-AVATAR INTEGRATION:",
+                    color = Color(0xFF00F0FF),
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+
+                (AuthManager.googleSimulationProfiles + AuthManager.facebookSimulationProfiles).forEach { profile ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF0F172A), shape = RoundedCornerShape(8.dp))
+                            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)), shape = RoundedCornerShape(8.dp))
+                            .clickable { onLoginSuccess(profile) }
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        AsyncImage(
+                            model = profile.photoUrl,
+                            contentDescription = "Avatar",
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(CircleShape)
+                                .border(1.dp, if (profile.provider == "Google") Color.White else Color(0xFF1877F2), CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = profile.name,
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.SansSerif
+                            )
+                            Text(
+                                text = profile.email,
+                                color = Color.Gray,
+                                fontSize = 9.sp,
+                                fontFamily = FontFamily.SansSerif
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .background(
+                                    if (profile.provider == "Google") Color.White.copy(alpha = 0.15f) else Color(0xFF1877F2).copy(alpha = 0.15f),
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = profile.provider.uppercase(),
+                                color = if (profile.provider == "Google") Color.White else Color(0xFF1877F2),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Play as Guest action
+            TextButton(
+                onClick = onPlayAsGuest,
+                modifier = Modifier.testTag("guest_login_button")
+            ) {
+                Text(
+                    text = "CONTINUE AS GUEST PILOT ➔",
+                    color = Color(0xFFFF0080),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ProfileDialog(
+    onLogout: () -> Unit,
+    onClose: () -> Unit,
+    onTriggerLogin: () -> Unit
+) {
+    val activeUser = AuthManager.currentUser
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth(0.85f)
+            .border(
+                BorderStroke(2.dp, Brush.horizontalGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080)))),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        containerColor = Color(0xFB0A0F2D),
+        title = {
+            Text(
+                text = "PILOT PROFILE PANEL",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                letterSpacing = 1.sp,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (activeUser != null) {
+                    // Profile Info
+                    AsyncImage(
+                        model = activeUser.photoUrl,
+                        contentDescription = "Pilot Avatar",
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(CircleShape)
+                            .border(2.dp, Color(0xFF00F0FF), CircleShape)
+                    )
+
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = activeUser.name,
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.SansSerif
+                        )
+                        Text(
+                            text = activeUser.email,
+                            color = Color.Gray,
+                            fontSize = 12.sp,
+                            fontFamily = FontFamily.SansSerif
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFF00F0FF).copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp))
+                                .border(BorderStroke(1.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(4.dp))
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "AUTH STATUS: ${activeUser.provider.uppercase()}",
+                                color = Color(0xFF00F0FF),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+
+                    // Progress Status List
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0x3F000000), shape = RoundedCornerShape(10.dp))
+                            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)), shape = RoundedCornerShape(10.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "SYNCHRONIZED PROGRESS",
+                            color = Color.Gray,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "UNLOCKED SECTOR:", color = Color.White, fontSize = 11.sp)
+                            Text(text = "SECTOR 50", color = Color(0xFF00F0FF), fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(text = "GALAXY STREAK:", color = Color.White, fontSize = 11.sp)
+                            Text(text = "STREAK X3", color = Color(0xFFFF0080), fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        }
+                    }
+
+                    // Logout Button
+                    Button(
+                        onClick = onLogout,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4D4D)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .testTag("logout_button")
+                    ) {
+                        Text(
+                            text = "LOGOUT PILOT ACCOUNT",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.SansSerif
+                        )
+                    }
+                } else {
+                    // Guest status prompt
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .background(Color(0xFF1E293B), shape = CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("👤", fontSize = 32.sp)
+                    }
+
+                    Text(
+                        text = "You are currently playing as a Guest Pilot. Your progress is local to this device.",
+                        color = Color.Gray,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        fontFamily = FontFamily.SansSerif
+                    )
+
+                    Button(
+                        onClick = onTriggerLogin,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .border(BorderStroke(1.2.dp, Color(0xFFFF0080)), shape = RoundedCornerShape(8.dp))
+                            .background(Brush.horizontalGradient(listOf(Color(0xFF4A0033), Color(0xFF1E002F))))
+                    ) {
+                        Text(
+                            text = "CONNECT PILOT ACCOUNT",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.SansSerif
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onClose,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(text = "DISMISS", color = Color.White, fontSize = 12.sp)
+            }
+        }
+    )
+}
+
+@Composable
+fun BonusCoinsPopup(onCollect: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCollect,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth(0.85f)
+            .border(
+                BorderStroke(2.dp, Color(0xFFFFD700)),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        containerColor = Color(0xFB0F140A),
+        title = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "🪙 REWARD RECEIVED! 🪙",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFFFD700),
+                    textAlign = TextAlign.Center,
+                    fontFamily = FontFamily.SansSerif
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "PILOT SYNC BONUS",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    fontFamily = FontFamily.Monospace
+                )
+                
+                Text(
+                    text = "+200 COINS",
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFFFFD700),
+                    fontFamily = FontFamily.Monospace
+                )
+
+                Text(
+                    text = "Your first-time authentication bonus has been credited to your account! Spend these coins in the garage to purchase advanced spaceships.",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    fontFamily = FontFamily.SansSerif
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onCollect,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .testTag("collect_bonus_button")
+            ) {
+                Text(
+                    text = "COLLECT COINS",
+                    color = Color.Black,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.SansSerif
+                )
+            }
+        }
+    )
 }

@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">Cosmic Striker</string>
+    <string name="facebook_app_id">1234567890</string>
+    <string name="facebook_client_token">abcdef1234567890</string>
+    <string name="fb_login_protocol_scheme">fb1234567890</string>
 </resources>
