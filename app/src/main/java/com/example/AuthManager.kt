@@ -16,6 +16,8 @@ import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.SetOptions
 
 data class UserProfile(
     val id: String,
@@ -38,14 +40,32 @@ object AuthManager {
         callbackManager = CallbackManager.Factory.create()
         
         // Initialize Firebase safely
+        var isInitialized = false
         try {
-            FirebaseApp.initializeApp(context)
+            val app = FirebaseApp.initializeApp(context)
+            if (app != null) {
+                isInitialized = true
+            }
         } catch (e: Exception) {
-            Log.e("AuthManager", "FirebaseApp auto-init failed, using programmatic fallback", e)
+            Log.e("AuthManager", "FirebaseApp auto-init failed with exception", e)
+        }
+
+        // Double check if the default instance is actually initialized
+        if (!isInitialized) {
+            try {
+                FirebaseApp.getInstance()
+                isInitialized = true
+            } catch (e: IllegalStateException) {
+                isInitialized = false
+            }
+        }
+
+        if (!isInitialized) {
+            Log.d("AuthManager", "Default FirebaseApp not initialized. Attempting programmatic fallback...")
             try {
                 val options = FirebaseOptions.Builder()
                     .setApiKey("AIzaSyFakeKeyPlaceholderForBuild")
-                    .setApplicationId("com.aistudio.cosmicstriker.wpqzxt")
+                    .setApplicationId("1:1234567890:android:${context.packageName}")
                     .setProjectId("cosmic-striker-fake-project")
                     .build()
                 FirebaseApp.initializeApp(context, options)
@@ -157,7 +177,7 @@ object AuthManager {
     }
 
     /**
-     * Sync user progress state from/to SharedPreferences based on account ID.
+     * Overloaded sync method for startup check compat.
      */
     fun syncAccountProgress(
         context: Context,
@@ -168,24 +188,137 @@ object AuthManager {
         currentOwnedShips: Set<String>,
         onProgressRestored: (coins: Int, level: Int, equippedShip: String, ownedShips: Set<String>) -> Unit
     ) {
-        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val hasSavedDataKey = "user_${userId}_has_saved_data"
-        val hasSavedData = prefs.getBoolean(hasSavedDataKey, false)
+        syncAccountProgress(
+            context = context,
+            userId = userId,
+            currentCoins = currentCoins,
+            currentLevel = currentLevel,
+            currentEquippedShip = currentEquippedShip,
+            currentOwnedShips = currentOwnedShips,
+            onNewUserReward = {},
+            onProgressRestored = onProgressRestored
+        )
+    }
 
-        if (hasSavedData) {
-            // Restore previous progress for this account
-            val coins = prefs.getInt("user_${userId}_total_coins", 0)
-            val level = prefs.getInt("user_${userId}_highest_unlocked_level", 1)
-            val equippedShip = prefs.getString("user_${userId}_equipped_ship_id", "falcon") ?: "falcon"
-            val ownedCsv = prefs.getString("user_${userId}_owned_ships_csv", "falcon") ?: "falcon"
-            val ownedShips = ownedCsv.split(",").filter { it.isNotEmpty() }.toSet()
-            
-            onProgressRestored(coins, level, equippedShip, ownedShips)
-        } else {
-            // New account: Save the current progress as their initial account progress
-            saveAccountProgress(context, userId, currentCoins, currentLevel, currentEquippedShip, currentOwnedShips)
-            prefs.edit().putBoolean(hasSavedDataKey, true).apply()
+    /**
+     * Sync user progress state from/to Firestore & SharedPreferences.
+     */
+    fun syncAccountProgress(
+        context: Context,
+        userId: String,
+        currentCoins: Int,
+        currentLevel: Int,
+        currentEquippedShip: String,
+        currentOwnedShips: Set<String>,
+        onNewUserReward: () -> Unit,
+        onProgressRestored: (coins: Int, level: Int, equippedShip: String, ownedShips: Set<String>) -> Unit
+    ) {
+        val db = try {
+            FirebaseFirestore.getInstance()
+        } catch (e: Exception) {
+            Log.e("AuthManager", "Failed to get Firestore instance", e)
+            null
         }
+
+        if (db == null) {
+            // Fallback to local SharedPreferences if Firestore fails
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val hasSavedDataKey = "user_${userId}_has_saved_data"
+            val hasSavedData = prefs.getBoolean(hasSavedDataKey, false)
+
+            if (hasSavedData) {
+                val coins = prefs.getInt("user_${userId}_total_coins", currentCoins)
+                val level = prefs.getInt("user_${userId}_highest_unlocked_level", currentLevel)
+                val equippedShip = prefs.getString("user_${userId}_equipped_ship_id", currentEquippedShip) ?: currentEquippedShip
+                val ownedCsv = prefs.getString("user_${userId}_owned_ships_csv", currentOwnedShips.joinToString(",")) ?: currentOwnedShips.joinToString(",")
+                val ownedShips = ownedCsv.split(",").filter { it.isNotEmpty() }.toSet()
+                onProgressRestored(coins, level, equippedShip, ownedShips)
+            } else {
+                // First time local fallback
+                val alreadyRewarded = prefs.getBoolean("user_${userId}_bonus_rewarded", false)
+                if (!alreadyRewarded) {
+                    prefs.edit().putBoolean("user_${userId}_bonus_rewarded", true).apply()
+                    onNewUserReward()
+                }
+                saveAccountProgress(context, userId, currentCoins + (if (!alreadyRewarded) 200 else 0), currentLevel, currentEquippedShip, currentOwnedShips)
+                prefs.edit().putBoolean(hasSavedDataKey, true).apply()
+            }
+            return
+        }
+
+        val docRef = db.collection("users").document(userId)
+        docRef.get()
+            .addOnSuccessListener { document ->
+                if (document != null && document.exists()) {
+                    // Existing User! Restore progress from Firestore
+                    val coins = document.getLong("coins")?.toInt() ?: currentCoins
+                    val level = document.getLong("level")?.toInt() ?: currentLevel
+                    val equippedShip = document.getString("equippedShip") ?: currentEquippedShip
+                    @Suppress("UNCHECKED_CAST")
+                    val ownedList = document.get("ownedShips") as? List<String>
+                    val ownedShips = ownedList?.toSet() ?: currentOwnedShips
+
+                    // Sync to local SharedPreferences so they are consistent offline
+                    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    prefs.edit().putBoolean("user_${userId}_has_saved_data", true).apply()
+                    saveAccountProgress(context, userId, coins, level, equippedShip, ownedShips)
+
+                    // Call restore callback to update UI states
+                    onProgressRestored(coins, level, equippedShip, ownedShips)
+                } else {
+                    // Brand New User in Firestore!
+                    // Check local SharedPreferences to see if we already marked them as rewarded locally
+                    val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    val localRewarded = prefs.getBoolean("user_${userId}_bonus_rewarded", false)
+                    
+                    val giveReward = !localRewarded
+                    val finalCoins = if (giveReward) currentCoins + 200 else currentCoins
+
+                    // Save new profile info to Firestore
+                    val data = hashMapOf(
+                        "coins" to finalCoins,
+                        "level" to currentLevel,
+                        "equippedShip" to currentEquippedShip,
+                        "ownedShips" to currentOwnedShips.toList(),
+                        "rewarded" to true
+                    )
+
+                    docRef.set(data)
+                        .addOnSuccessListener {
+                            Log.d("AuthManager", "Successfully saved initial progress to Firestore")
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e("AuthManager", "Failed to save initial progress to Firestore", e)
+                        }
+
+                    // Save local SharedPreferences
+                    prefs.edit()
+                        .putBoolean("user_${userId}_has_saved_data", true)
+                        .putBoolean("user_${userId}_bonus_rewarded", true)
+                        .apply()
+                    saveAccountProgress(context, userId, finalCoins, currentLevel, currentEquippedShip, currentOwnedShips)
+
+                    if (giveReward) {
+                        onNewUserReward()
+                    }
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e("AuthManager", "Error reading progress from Firestore, falling back to local SharedPreferences", e)
+                // If network is offline, use local SharedPreferences as fallback
+                val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val hasSavedDataKey = "user_${userId}_has_saved_data"
+                val hasSavedData = prefs.getBoolean(hasSavedDataKey, false)
+
+                if (hasSavedData) {
+                    val coins = prefs.getInt("user_${userId}_total_coins", currentCoins)
+                    val level = prefs.getInt("user_${userId}_highest_unlocked_level", currentLevel)
+                    val equippedShip = prefs.getString("user_${userId}_equipped_ship_id", currentEquippedShip) ?: currentEquippedShip
+                    val ownedCsv = prefs.getString("user_${userId}_owned_ships_csv", currentOwnedShips.joinToString(",")) ?: currentOwnedShips.joinToString(",")
+                    val ownedShips = ownedCsv.split(",").filter { it.isNotEmpty() }.toSet()
+                    onProgressRestored(coins, level, equippedShip, ownedShips)
+                }
+            }
     }
 
     fun saveAccountProgress(
@@ -196,6 +329,7 @@ object AuthManager {
         equippedShip: String,
         ownedShips: Set<String>
     ) {
+        // 1. Save locally in SharedPreferences
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         prefs.edit().apply {
             putInt("user_${userId}_total_coins", coins)
@@ -203,6 +337,27 @@ object AuthManager {
             putString("user_${userId}_equipped_ship_id", equippedShip)
             putString("user_${userId}_owned_ships_csv", ownedShips.joinToString(","))
             apply()
+        }
+
+        // 2. Save to Firestore asynchronously in background (fire and forget)
+        try {
+            val db = FirebaseFirestore.getInstance()
+            val docRef = db.collection("users").document(userId)
+            val data = hashMapOf(
+                "coins" to coins,
+                "level" to level,
+                "equippedShip" to equippedShip,
+                "ownedShips" to ownedShips.toList()
+            )
+            docRef.set(data, SetOptions.merge())
+                .addOnSuccessListener {
+                    Log.d("AuthManager", "Successfully updated progress in Firestore")
+                }
+                .addOnFailureListener { e ->
+                    Log.e("AuthManager", "Failed to update progress in Firestore", e)
+                }
+        } catch (e: Exception) {
+            Log.e("AuthManager", "Firestore getInstance or set failed", e)
         }
     }
 }

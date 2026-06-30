@@ -14,7 +14,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.cosmicstriker.wpqzxt"
+    applicationId = "com.example.cosmicstriker"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
@@ -96,6 +96,7 @@ dependencies {
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
   implementation(libs.firebase.auth)
+  implementation(libs.firebase.firestore)
   implementation(libs.firebase.appcheck.recaptcha)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)

@@ -247,47 +247,29 @@ class MainActivity : ComponentActivity() {
     }
 
     fun handleLoginSuccess(profile: UserProfile) {
-        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
-        val hasSavedDataKey = "user_${profile.id}_has_saved_data"
-        val hasSavedData = prefs.getBoolean(hasSavedDataKey, false)
-        
-        if (hasSavedData) {
-            // Restore existing progress for this account
-            AuthManager.syncAccountProgress(
-                context = this,
-                userId = profile.id,
-                currentCoins = totalCoinsState,
-                currentLevel = highestLevelState,
-                currentEquippedShip = equippedShipIdState,
-                currentOwnedShips = ownedShipsState
-            ) { coins, level, equippedShip, ownedShips ->
+        AuthManager.syncAccountProgress(
+            context = this,
+            userId = profile.id,
+            currentCoins = totalCoinsState,
+            currentLevel = highestLevelState,
+            currentEquippedShip = equippedShipIdState,
+            currentOwnedShips = ownedShipsState,
+            onNewUserReward = {
+                totalCoinsState += 200
+                showBonusPopup = true
+            },
+            onProgressRestored = { coins, level, equippedShip, ownedShips ->
                 totalCoinsState = coins
                 highestLevelState = level
                 equippedShipIdState = equippedShip
                 ownedShipsState = ownedShips
                 selectedLevel = level
+                
+                webView?.post {
+                    webView?.evaluateJavascript("window.syncEquippedShip()", null)
+                }
             }
-        } else {
-            // This is a brand new account first-time sign-in!
-            // Award 200 bonus coins to current progress
-            val earnedBonus = AuthManager.checkAndRewardBonus(this, profile.id)
-            if (earnedBonus) {
-                totalCoinsState += 200
-                showBonusPopup = true
-            }
-            
-            // Save current progress as the account's initial progress
-            AuthManager.syncAccountProgress(
-                context = this,
-                userId = profile.id,
-                currentCoins = totalCoinsState,
-                currentLevel = highestLevelState,
-                currentEquippedShip = equippedShipIdState,
-                currentOwnedShips = ownedShipsState
-            ) { coins, level, equippedShip, ownedShips ->
-                // Keep the current progress
-            }
-        }
+        )
         
         AuthManager.saveSession(this, profile)
         Toast.makeText(this, "Logged in as ${profile.name}!", Toast.LENGTH_LONG).show()
@@ -1612,7 +1594,7 @@ fun MainMenuOverlay(
                         .fillMaxWidth(0.95f)
                         .height(52.dp)
                         .background(
-                            Color(0x3F05081C), // Dark transparent glassmorphic background
+                            Color.Transparent, // Transparent background as requested
                             shape = RoundedCornerShape(12.dp)
                         )
                         .border(
