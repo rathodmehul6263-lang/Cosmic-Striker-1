@@ -115,6 +115,16 @@ object AuthManager {
             Log.d("AuthManager", "Successfully loaded Web Client ID: $webClientId")
         }
 
+        // Auditing all configuration parameters at runtime
+        val runtimeSHA1 = getCertificateSHA1(context)
+        Log.i("FirebaseAuthAudit", "=================== FIREBASE AUTH CONFIG AUDIT ===================")
+        Log.i("FirebaseAuthAudit", "Package Name (at runtime): ${context.packageName}")
+        Log.i("FirebaseAuthAudit", "Application ID (Build): com.example.cosmicstriker")
+        Log.i("FirebaseAuthAudit", "SHA-1 Fingerprint (Programmatic): $runtimeSHA1")
+        Log.i("FirebaseAuthAudit", "SHA-1 Fingerprint (Expected): 05:B6:F8:FE:7B:7C:1C:DA:B6:AD:80:E7:3B:43:89:5A:5C:3D:03:67")
+        Log.i("FirebaseAuthAudit", "Default Web Client ID (Loaded): $webClientId")
+        Log.i("FirebaseAuthAudit", "==================================================================")
+
         val gsoBuilder = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
             .requestProfile()
@@ -396,5 +406,46 @@ object AuthManager {
         } catch (e: Exception) {
             Log.e("AuthManager", "Firestore getInstance or set failed", e)
         }
+    }
+
+    fun getCertificateSHA1(context: Context): String {
+        try {
+            val packageInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getPackageInfo(
+                    context.packageName,
+                    android.content.pm.PackageManager.GET_SIGNATURES
+                )
+            }
+            
+            val signatures = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                packageInfo.signingInfo?.apkContentsSigners
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.signatures
+            }
+
+            if (signatures != null && signatures.isNotEmpty()) {
+                val cert = signatures[0].toByteArray()
+                val md = java.security.MessageDigest.getInstance("SHA-1")
+                val publicKey = md.digest(cert)
+                val hexString = StringBuilder()
+                for (i in publicKey.indices) {
+                    val appendString = Integer.toHexString(0xFF and publicKey[i].toInt())
+                    if (appendString.length == 1) hexString.append("0")
+                    hexString.append(appendString)
+                    if (i < publicKey.size - 1) hexString.append(":")
+                }
+                return hexString.toString().uppercase()
+            }
+        } catch (e: Exception) {
+            Log.e("AuthManager", "Error getting SHA-1 programmatically", e)
+        }
+        return "UNKNOWN"
     }
 }

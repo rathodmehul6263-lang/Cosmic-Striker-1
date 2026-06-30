@@ -85,6 +85,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private lateinit var leaderboardManager: LeaderboardManager
+    private lateinit var backgroundMusicManager: BackgroundMusicManager
+    private lateinit var billingManager: BillingManager
+    private var showCoinShopDialog by mutableStateOf(false)
+    private var showPurchaseSuccessOverlay by mutableStateOf(false)
+    private var successGrantedCoinsAmount by mutableStateOf(0)
     var webView: WebView? = null
 
     // Compose state variables
@@ -202,8 +207,38 @@ class MainActivity : ComponentActivity() {
     private var musicEnabledState by mutableStateOf(true)
     private var vibrationEnabledState by mutableStateOf(true)
 
-    fun getSoundEffectsEnabled(): Boolean = soundEffectsEnabledState
-    fun getMusicEnabled(): Boolean = musicEnabledState
+    private val hasAudioOutput: Boolean by lazy {
+        try {
+            val pm = packageManager
+            if (!pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_AUDIO_OUTPUT)) {
+                return@lazy false
+            }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                val am = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+                if (am != null) {
+                    val devices = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+                    if (devices.isEmpty()) {
+                        return@lazy false
+                    }
+                }
+            }
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error checking audio output capability", e)
+            true
+        }
+    }
+
+    fun getSoundEffectsEnabled(): Boolean {
+        if (!hasAudioOutput) return false
+        return soundEffectsEnabledState
+    }
+
+    fun getMusicEnabled(): Boolean {
+        if (!hasAudioOutput) return false
+        return musicEnabledState
+    }
+
     fun getVibrationEnabled(): Boolean = vibrationEnabledState
 
     fun setSoundEffectsEnabled(enabled: Boolean) {
@@ -219,6 +254,9 @@ class MainActivity : ComponentActivity() {
         musicEnabledState = enabled
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("settings_music", enabled).apply()
+        if (::backgroundMusicManager.isInitialized) {
+            backgroundMusicManager.setEnabled(enabled)
+        }
         webView?.post {
             webView?.evaluateJavascript("window.updateSettings()", null)
         }
@@ -358,6 +396,30 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (::backgroundMusicManager.isInitialized) {
+            backgroundMusicManager.resumeMusic()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        if (::backgroundMusicManager.isInitialized) {
+            backgroundMusicManager.pauseMusic()
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (::backgroundMusicManager.isInitialized) {
+            backgroundMusicManager.release()
+        }
+        if (::billingManager.isInitialized) {
+            billingManager.destroy()
+        }
+    }
+
     private fun handleGoogleSignInResult(completedTask: com.google.android.gms.tasks.Task<com.google.android.gms.auth.api.signin.GoogleSignInAccount>) {
         try {
             val account = completedTask.getResult(ApiException::class.java)
@@ -414,6 +476,9 @@ class MainActivity : ComponentActivity() {
         soundEffectsEnabledState = prefs.getBoolean("settings_sound_effects", true)
         musicEnabledState = prefs.getBoolean("settings_music", true)
         vibrationEnabledState = prefs.getBoolean("settings_vibration", true)
+        
+        backgroundMusicManager = BackgroundMusicManager(this)
+        backgroundMusicManager.setEnabled(musicEnabledState)
         highestLevelState = prefs.getInt("highest_unlocked_level", 1)
         totalCoinsState = prefs.getInt("total_coins", 0)
         selectedLevel = highestLevelState
@@ -537,7 +602,25 @@ class MainActivity : ComponentActivity() {
             e.printStackTrace()
         }
 
+        billingManager = BillingManager(
+            context = this,
+            onCoinsPurchased = { productId, coinAmount ->
+                val newCoins = totalCoinsState + coinAmount
+                setTotalCoins(newCoins)
+                successGrantedCoinsAmount = coinAmount
+                showPurchaseSuccessOverlay = true
+            },
+            onPurchaseFailed = { productId, errorMsg ->
+                Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show()
+            },
+            onPurchaseCancelled = { productId ->
+                Toast.makeText(this, "Purchase Cancelled", Toast.LENGTH_SHORT).show()
+            }
+        )
+
         setContent {
+            val isBillingReadyState by billingManager.isBillingReady.collectAsState()
+            val productDetailsMapState by billingManager.productDetailsMap.collectAsState()
             MyApplicationTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -550,6 +633,24 @@ class MainActivity : ComponentActivity() {
                                 webView = wv
                             }
                         )
+
+                        LaunchedEffect(currentScreen, musicEnabledState) {
+                            if (musicEnabledState) {
+                                when (currentScreen) {
+                                    GameScreen.MENU -> {
+                                        backgroundMusicManager.startMenuMusic()
+                                    }
+                                    GameScreen.PLAYING -> {
+                                        backgroundMusicManager.startGameplayMusic()
+                                    }
+                                    GameScreen.GAMEOVER, GameScreen.LEVEL_COMPLETE -> {
+                                        backgroundMusicManager.startMenuMusic()
+                                    }
+                                }
+                            } else {
+                                backgroundMusicManager.stopMusic()
+                            }
+                        }
 
                         // Handle Android Back presses smoothly
                         BackHandler(enabled = true) {
@@ -620,6 +721,10 @@ class MainActivity : ComponentActivity() {
                                         } else {
                                             Toast.makeText(this@MainActivity, "Not enough coins! Play levels to earn more.", Toast.LENGTH_SHORT).show()
                                         }
+                                    },
+                                    onCoinShopClick = {
+                                        playClickSound()
+                                        showCoinShopDialog = true
                                     }
                                 )
                             }
@@ -746,6 +851,25 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
+                        // Overlay Coin Shop Dialog on top of any active screen when open
+                        if (showCoinShopDialog) {
+                            CoinShopDialog(
+                                isBillingReady = isBillingReadyState,
+                                productDetailsMap = productDetailsMapState,
+                                onBuyPack = { productId ->
+                                    billingManager.launchPurchaseFlow(this@MainActivity, productId)
+                                },
+                                onClose = { showCoinShopDialog = false },
+                                playClick = { playClickSound() },
+                                showSuccessOverlay = showPurchaseSuccessOverlay,
+                                successGrantedAmount = successGrantedCoinsAmount,
+                                onSuccessOverlayDismiss = {
+                                    showPurchaseSuccessOverlay = false
+                                    showCoinShopDialog = false
+                                }
+                            )
+                        }
+
                         // Auth Welcome Screen for first launches
                         if (showAuthWelcomeScreen) {
                             AuthWelcomeOverlay(
@@ -806,11 +930,7 @@ class MainActivity : ComponentActivity() {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
-                val webViewContext = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                    ctx.createAttributionContext("default")
-                } else {
-                    ctx
-                }
+                val webViewContext = ctx
                 WebView(webViewContext).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -828,6 +948,7 @@ class MainActivity : ComponentActivity() {
                         useWideViewPort = true
                         loadWithOverviewMode = true
                         mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+                        mediaPlaybackRequiresUserGesture = false
                     }
 
                     setBackgroundColor(0xFF03030C.toInt())
@@ -1392,7 +1513,8 @@ fun MainMenuOverlay(
     equippedShipId: String,
     ownedShips: Set<String>,
     onEquipShip: (String) -> Unit,
-    onBuyShip: (String, Int) -> Unit
+    onBuyShip: (String, Int) -> Unit,
+    onCoinShopClick: () -> Unit = {}
 ) {
     var showLeaderboardPanel by remember { mutableStateOf(false) }
 
@@ -1421,7 +1543,7 @@ fun MainMenuOverlay(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 24.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp)
                 .graphicsLayer { alpha = enterAlpha },
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
@@ -1431,7 +1553,7 @@ fun MainMenuOverlay(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 16.dp, start = 8.dp, end = 8.dp),
+                    .padding(top = 4.dp, start = 8.dp, end = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1493,6 +1615,7 @@ fun MainMenuOverlay(
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
+                        .clickable { onCoinShopClick() }
                         .background(Color(0xFFFFD700).copy(alpha = 0.12f), shape = RoundedCornerShape(14.dp))
                         .border(BorderStroke(1.2.dp, Brush.linearGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))), shape = RoundedCornerShape(14.dp))
                         .padding(horizontal = 14.dp, vertical = 6.dp)
@@ -1512,19 +1635,34 @@ fun MainMenuOverlay(
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace
                     )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .background(Color(0xFFFFD700), shape = CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "+",
+                            color = Color.Black,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
 
             // 2. HERO HEADER (Title and Subtitle)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(vertical = 10.dp)
+                modifier = Modifier.padding(vertical = 2.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     // Magenta holographic backdrop shadow
                     Text(
                         text = "COSMIC STRIKER",
-                        fontSize = 35.sp,
+                        fontSize = 28.sp,
                         fontWeight = FontWeight.Black,
                         color = Color(0xFFFF007F).copy(alpha = 0.65f),
                         textAlign = TextAlign.Center,
@@ -1534,7 +1672,7 @@ fun MainMenuOverlay(
                     // Cyan holographic backdrop shadow
                     Text(
                         text = "COSMIC STRIKER",
-                        fontSize = 35.sp,
+                        fontSize = 28.sp,
                         fontWeight = FontWeight.Black,
                         color = Color(0xFF00E5FF).copy(alpha = 0.65f),
                         textAlign = TextAlign.Center,
@@ -1544,7 +1682,7 @@ fun MainMenuOverlay(
                     // Core white title text
                     Text(
                         text = "COSMIC STRIKER",
-                        fontSize = 35.sp,
+                        fontSize = 28.sp,
                         fontWeight = FontWeight.Black,
                         color = Color.White,
                         textAlign = TextAlign.Center,
@@ -1552,20 +1690,20 @@ fun MainMenuOverlay(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
                 Text(
                     text = "GALACTIC DEFENSE",
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace,
                     color = Color(0xFF00F0FF),
-                    letterSpacing = 6.sp,
+                    letterSpacing = 4.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier
                         .background(Color(0x3A000000), shape = RoundedCornerShape(4.dp))
                         .border(BorderStroke(0.8.dp, Color(0x6600F0FF)), shape = RoundedCornerShape(4.dp))
-                        .padding(horizontal = 14.dp, vertical = 4.dp)
+                        .padding(horizontal = 10.dp, vertical = 2.dp)
                 )
             }
 
@@ -1586,13 +1724,13 @@ fun MainMenuOverlay(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 12.dp)
+                    .padding(bottom = 4.dp)
             ) {
                 // Sleek cybernetic section header (transparent glassmorphism with neon cyan/purple border and subtle glow)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth(0.95f)
-                        .height(52.dp)
+                        .height(42.dp)
                         .background(
                             Color.Transparent, // Transparent background as requested
                             shape = RoundedCornerShape(12.dp)
@@ -1629,7 +1767,7 @@ fun MainMenuOverlay(
                     Text(
                         text = "SELECT MISSION SECTOR",
                         color = Color.White,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 2.sp,
                         textAlign = TextAlign.Center,
@@ -1637,23 +1775,23 @@ fun MainMenuOverlay(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 val (difficultyText, difficultyColor) = getDifficultyCategory(selectedLevel)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 4.dp)
                 ) {
                     Text(
                         text = "SECTOR $selectedLevel: ",
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
                     Text(
                         text = difficultyText,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Black,
                         color = difficultyColor,
                         fontFamily = FontFamily.Monospace
@@ -1663,13 +1801,13 @@ fun MainMenuOverlay(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(180.dp)
+                        .height(120.dp)
                         .background(Color(0x7F04071C), shape = RoundedCornerShape(16.dp))
                         .border(
                             BorderStroke(1.2.dp, Brush.linearGradient(listOf(Color(0x6600F0FF), Color(0x22FFFFFF)))),
                             shape = RoundedCornerShape(16.dp)
                         )
-                        .padding(8.dp),
+                        .padding(4.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     val scrollState = rememberScrollState()
@@ -1677,12 +1815,12 @@ fun MainMenuOverlay(
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(scrollState),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         for (row in 0 until 10) {
                             Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 for (col in 1..5) {
@@ -3182,7 +3320,7 @@ fun SpaceshipGarageCarousel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(130.dp),
+                .height(100.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -3254,7 +3392,7 @@ fun SpaceshipGarageCarousel(
                             .size(36.dp)
                             .background(Color.Black.copy(alpha = 0.65f), shape = RoundedCornerShape(50))
                             .align(Alignment.TopEnd)
-                            .border(BorderStroke(1.dp, Color.Red), shape = RoundedCornerShape(50)),
+                            .border(BorderStroke(1.dp, Color(0xFF00F0FF).copy(alpha = 0.5f)), shape = RoundedCornerShape(50)),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(text = "🔒", fontSize = 14.sp)
@@ -3386,8 +3524,6 @@ fun SpaceshipGarageCarousel(
             ) {
                 StatProgressBar(label = "SPD", value = ship.speed, color = Color(0xFF00E5FF))
                 StatProgressBar(label = "DMG", value = ship.damage, color = Color(0xFFFF6A00))
-                StatProgressBar(label = "SHD", value = ship.shield, color = Color(0xFF39FF14))
-                StatProgressBar(label = "ROF", value = ship.fireRate, color = Color(0xFFFF00FF))
             }
 
             Spacer(modifier = Modifier.height(6.dp))

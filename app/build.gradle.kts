@@ -104,6 +104,7 @@ dependencies {
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
   implementation(libs.play.services.auth)
+  implementation("com.android.billingclient:billing-ktx:7.0.0")
   implementation(libs.facebook.login)
   // implementation(libs.play.services.location)
   implementation(libs.retrofit)
