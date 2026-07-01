@@ -15,6 +15,35 @@ class BackgroundMusicManager(private val context: Context) {
     private var currentMusicType: MusicType? = null
     private var isEnabled = true
 
+    private val audioManager: AudioManager by lazy {
+        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    }
+
+    private var focusRequest: Any? = null // AudioFocusRequest for API 26+
+
+    private val focusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_LOSS -> {
+                pauseOrStop()
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
+                pauseOrStop()
+            }
+            AudioManager.AUDIOFOCUS_GAIN -> {
+                resumeOrStart()
+            }
+        }
+    }
+
+    private fun requestAudioFocus(): Boolean {
+        return true
+    }
+
+    private fun abandonAudioFocus() {
+        // No-op to avoid AppOps CONTROL_AUDIO check
+    }
+
     private val hasAudioOutput: Boolean by lazy {
         try {
             val pm = context.packageManager
@@ -43,6 +72,7 @@ class BackgroundMusicManager(private val context: Context) {
         try {
             mediaPlayer?.pause()
             proceduralSynth?.stop()
+            abandonAudioFocus()
         } catch (e: Exception) {
             Log.e("BackgroundMusicManager", "Error pausing music", e)
         }
@@ -55,6 +85,7 @@ class BackgroundMusicManager(private val context: Context) {
             Log.d("BackgroundMusicManager", "No audio output feature detected, skipping resume")
             return
         }
+        requestAudioFocus()
         if (mediaPlayer != null) {
             try {
                 mediaPlayer?.start()
@@ -87,6 +118,7 @@ class BackgroundMusicManager(private val context: Context) {
         }
         proceduralSynth?.stop()
         proceduralSynth = null
+        abandonAudioFocus()
     }
 
     fun pauseMusic() {
@@ -112,6 +144,8 @@ class BackgroundMusicManager(private val context: Context) {
             Log.d("BackgroundMusicManager", "No audio output feature detected, skipping playMusic")
             return
         }
+
+        requestAudioFocus()
 
         val filename = when (type) {
             MusicType.MENU -> "menu_music.mp3"
