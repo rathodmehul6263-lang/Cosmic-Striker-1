@@ -1,6 +1,10 @@
 package com.example
 
 import android.content.Context
+import android.util.Log
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FieldValue
+import com.google.firebase.firestore.SetOptions
 
 data class LeaderboardEntry(
     val score: Int,
@@ -9,6 +13,75 @@ data class LeaderboardEntry(
 
 class LeaderboardManager(context: Context) {
     private val prefs = context.getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+
+    fun updateOnlineLeaderboard(
+        userId: String,
+        displayName: String,
+        newScore: Int,
+        killsEarned: Int,
+        currentCoins: Int
+    ) {
+        try {
+            val db = FirebaseFirestore.getInstance()
+            val docRef = db.collection("leaderboard").document(userId)
+            docRef.get().addOnSuccessListener { document ->
+                if (document != null && document.exists()) {
+                    val currentHighest = document.getLong("highestScore") ?: 0L
+                    val currentKills = document.getLong("totalKills") ?: 0L
+                    val finalHighest = maxOf(currentHighest, newScore.toLong())
+                    val finalKills = currentKills + killsEarned.toLong()
+
+                    val updates = hashMapOf<String, Any>(
+                        "displayName" to displayName,
+                        "highestScore" to finalHighest,
+                        "totalKills" to finalKills,
+                        "coins" to currentCoins,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                    docRef.update(updates)
+                        .addOnSuccessListener {
+                            Log.d("LeaderboardManager", "Online leaderboard updated successfully")
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e("LeaderboardManager", "Failed to update online leaderboard", e)
+                        }
+                } else {
+                    val data = hashMapOf<String, Any>(
+                        "displayName" to displayName,
+                        "highestScore" to newScore,
+                        "totalKills" to killsEarned,
+                        "coins" to currentCoins,
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                    docRef.set(data)
+                        .addOnSuccessListener {
+                            Log.d("LeaderboardManager", "Online leaderboard created successfully")
+                        }
+                        .addOnFailureListener { e ->
+                            Log.e("LeaderboardManager", "Failed to create online leaderboard", e)
+                        }
+                }
+            }.addOnFailureListener { e ->
+                Log.e("LeaderboardManager", "Error reading online leaderboard document", e)
+                val data = hashMapOf<String, Any>(
+                    "displayName" to displayName,
+                    "highestScore" to newScore,
+                    "totalKills" to killsEarned,
+                    "coins" to currentCoins,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+                docRef.set(data, SetOptions.merge())
+                    .addOnSuccessListener {
+                        Log.d("LeaderboardManager", "Online leaderboard set fallback succeeded")
+                    }
+                    .addOnFailureListener { ex ->
+                        Log.e("LeaderboardManager", "Online leaderboard set fallback failed", ex)
+                    }
+            }
+        } catch (e: Exception) {
+            Log.e("LeaderboardManager", "Firestore error in updateOnlineLeaderboard", e)
+        }
+    }
 
     fun getTopScores(): List<LeaderboardEntry> {
         val raw = prefs.getString("top_scores_raw", "") ?: ""

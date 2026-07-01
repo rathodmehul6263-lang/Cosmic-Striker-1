@@ -76,7 +76,8 @@ enum class GameScreen {
     MENU,
     PLAYING,
     GAMEOVER,
-    LEVEL_COMPLETE
+    LEVEL_COMPLETE,
+    LEADERBOARD
 }
 
 class MainActivity : ComponentActivity() {
@@ -451,6 +452,20 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    fun submitScoreToOnlineLeaderboard(score: Int, kills: Int) {
+        val user = AuthManager.currentUser
+        if (user != null) {
+            val coins = getTotalCoins()
+            leaderboardManager.updateOnlineLeaderboard(
+                userId = user.id,
+                displayName = user.name,
+                newScore = score,
+                killsEarned = kills,
+                currentCoins = coins
+            )
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -631,7 +646,7 @@ class MainActivity : ComponentActivity() {
                                     GameScreen.PLAYING -> {
                                         backgroundMusicManager.startGameplayMusic()
                                     }
-                                    GameScreen.GAMEOVER, GameScreen.LEVEL_COMPLETE -> {
+                                    GameScreen.GAMEOVER, GameScreen.LEVEL_COMPLETE, GameScreen.LEADERBOARD -> {
                                         backgroundMusicManager.startMenuMusic()
                                     }
                                 }
@@ -650,7 +665,7 @@ class MainActivity : ComponentActivity() {
                                     isPaused = true
                                     webView?.evaluateJavascript("window.pauseGame()", null)
                                 }
-                            } else if (currentScreen == GameScreen.GAMEOVER || currentScreen == GameScreen.LEVEL_COMPLETE) {
+                            } else if (currentScreen == GameScreen.GAMEOVER || currentScreen == GameScreen.LEVEL_COMPLETE || currentScreen == GameScreen.LEADERBOARD) {
                                 currentScreen = GameScreen.MENU
                                 isPaused = false
                                 webView?.evaluateJavascript("window.showStartScreen()", null)
@@ -713,6 +728,19 @@ class MainActivity : ComponentActivity() {
                                     onCoinShopClick = {
                                         playClickSound()
                                         showCoinShopDialog = true
+                                    },
+                                    onLeaderboardClick = {
+                                        playClickSound()
+                                        currentScreen = GameScreen.LEADERBOARD
+                                    }
+                                )
+                            }
+                            GameScreen.LEADERBOARD -> {
+                                LeaderboardScreen(
+                                    currentUserId = AuthManager.currentUser?.id,
+                                    onClose = {
+                                        playClickSound()
+                                        currentScreen = GameScreen.MENU
                                     }
                                 )
                             }
@@ -944,12 +972,13 @@ class MainActivity : ComponentActivity() {
                     // Hook Javascript Interface
                     addJavascriptInterface(GameInterface(
                         activity = this@MainActivity,
-                        onGameOver = { score ->
+                        onGameOver = { score, kills ->
                             finalScore = score
                             if (!isScoreSavedForCurrentGame) {
                                 isNewHighScore = leaderboardManager.addScore(score)
                                 leaderboardList = leaderboardManager.getTopScores()
                                 isScoreSavedForCurrentGame = true
+                                submitScoreToOnlineLeaderboard(score, kills)
                             }
                             currentScreen = GameScreen.GAMEOVER
                         },
@@ -960,7 +989,7 @@ class MainActivity : ComponentActivity() {
                         getHighScore = {
                             leaderboardManager.getHighScore()
                         },
-                        saveScore = { score ->
+                        saveScore = { score, kills ->
                             if (!isScoreSavedForCurrentGame) {
                                 val isNewHigh = leaderboardManager.addScore(score)
                                 leaderboardList = leaderboardManager.getTopScores()
@@ -968,6 +997,7 @@ class MainActivity : ComponentActivity() {
                                     isNewHighScore = true
                                 }
                                 isScoreSavedForCurrentGame = true
+                                submitScoreToOnlineLeaderboard(score, kills)
                             }
                         }
                     ), "AndroidGame")
@@ -983,15 +1013,20 @@ class MainActivity : ComponentActivity() {
 // Thread-safe WebView Native Javascript bridge class
 class GameInterface(
     private val activity: MainActivity,
-    private val onGameOver: (Int) -> Unit,
+    private val onGameOver: (Int, Int) -> Unit,
     private val onGameStarted: () -> Unit,
     private val getHighScore: () -> Int,
-    private val saveScore: (Int) -> Unit
+    private val saveScore: (Int, Int) -> Unit
 ) {
     @android.webkit.JavascriptInterface
     fun gameOver(score: Int) {
+        gameOver(score, 0)
+    }
+
+    @android.webkit.JavascriptInterface
+    fun gameOver(score: Int, kills: Int) {
         activity.runOnUiThread {
-            onGameOver(score)
+            onGameOver(score, kills)
         }
     }
 
@@ -1009,8 +1044,13 @@ class GameInterface(
 
     @android.webkit.JavascriptInterface
     fun saveNativeScore(score: Int) {
+        saveNativeScore(score, 0)
+    }
+
+    @android.webkit.JavascriptInterface
+    fun saveNativeScore(score: Int, kills: Int) {
         activity.runOnUiThread {
-            saveScore(score)
+            saveScore(score, kills)
         }
     }
 
@@ -1502,7 +1542,8 @@ fun MainMenuOverlay(
     ownedShips: Set<String>,
     onEquipShip: (String) -> Unit,
     onBuyShip: (String, Int) -> Unit,
-    onCoinShopClick: () -> Unit = {}
+    onCoinShopClick: () -> Unit = {},
+    onLeaderboardClick: () -> Unit = {}
 ) {
     var showLeaderboardPanel by remember { mutableStateOf(false) }
 
@@ -1924,7 +1965,7 @@ fun MainMenuOverlay(
             ) {
                 // Leaderboard Button
                 Button(
-                    onClick = { showLeaderboardPanel = true },
+                    onClick = onLeaderboardClick,
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                     contentPadding = PaddingValues(),
                     shape = RoundedCornerShape(12.dp),

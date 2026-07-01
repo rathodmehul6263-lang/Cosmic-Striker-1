@@ -867,7 +867,7 @@
             isScoreSaved = true;
             try {
                 if (window.AndroidGame && typeof window.AndroidGame.saveNativeScore === 'function') {
-                    window.AndroidGame.saveNativeScore(score);
+                    window.AndroidGame.saveNativeScore(score, levelKills || 0);
                 }
             } catch (e) {
                 console.error("Native saveNativeScore error", e);
@@ -2553,7 +2553,7 @@
             
             try {
                 if (window.AndroidGame && typeof window.AndroidGame.gameOver === 'function') {
-                    window.AndroidGame.gameOver(score);
+                    window.AndroidGame.gameOver(score, levelKills || 0);
                 } else {
                     gameOverScreen.classList.remove('hidden');
                 }
