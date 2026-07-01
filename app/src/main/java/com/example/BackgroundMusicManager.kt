@@ -18,19 +18,7 @@ class BackgroundMusicManager(private val context: Context) {
     private val hasAudioOutput: Boolean by lazy {
         try {
             val pm = context.packageManager
-            if (!pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_AUDIO_OUTPUT)) {
-                return@lazy false
-            }
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                val am = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-                if (am != null) {
-                    val devices = am.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                    if (devices.isEmpty()) {
-                        return@lazy false
-                    }
-                }
-            }
-            true
+            pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_AUDIO_OUTPUT)
         } catch (e: Exception) {
             Log.e("BackgroundMusicManager", "Error checking audio output capability", e)
             true

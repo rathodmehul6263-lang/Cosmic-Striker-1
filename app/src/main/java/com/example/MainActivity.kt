@@ -210,19 +210,7 @@ class MainActivity : ComponentActivity() {
     private val hasAudioOutput: Boolean by lazy {
         try {
             val pm = packageManager
-            if (!pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_AUDIO_OUTPUT)) {
-                return@lazy false
-            }
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                val am = getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
-                if (am != null) {
-                    val devices = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
-                    if (devices.isEmpty()) {
-                        return@lazy false
-                    }
-                }
-            }
-            true
+            pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_AUDIO_OUTPUT)
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Error checking audio output capability", e)
             true
