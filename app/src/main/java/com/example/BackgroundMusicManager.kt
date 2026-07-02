@@ -9,6 +9,14 @@ import android.media.MediaPlayer
 import android.util.Log
 
 class BackgroundMusicManager(private val context: Context) {
+    private val attributionContext: Context by lazy {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            context.createAttributionContext("audioPlayback")
+        } else {
+            context
+        }
+    }
+
     private var mediaPlayer: MediaPlayer? = null
     private var proceduralSynth: ProceduralSynth? = null
     private var isMusicPlaying = false
@@ -16,7 +24,7 @@ class BackgroundMusicManager(private val context: Context) {
     private var isEnabled = true
 
     private val audioManager: AudioManager by lazy {
-        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        attributionContext.getSystemService(Context.AUDIO_SERVICE) as AudioManager
     }
 
     private var focusRequest: Any? = null // AudioFocusRequest for API 26+
@@ -46,7 +54,7 @@ class BackgroundMusicManager(private val context: Context) {
 
     private val hasAudioOutput: Boolean by lazy {
         try {
-            val pm = context.packageManager
+            val pm = attributionContext.packageManager
             pm.hasSystemFeature(android.content.pm.PackageManager.FEATURE_AUDIO_OUTPUT)
         } catch (e: Exception) {
             Log.e("BackgroundMusicManager", "Error checking audio output capability", e)
@@ -154,7 +162,7 @@ class BackgroundMusicManager(private val context: Context) {
 
         if (assetExists(filename)) {
             try {
-                val afd = context.assets.openFd(filename)
+                val afd = attributionContext.assets.openFd(filename)
                 mediaPlayer = MediaPlayer().apply {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
                         setAudioAttributes(
@@ -191,7 +199,7 @@ class BackgroundMusicManager(private val context: Context) {
 
     private fun assetExists(filename: String): Boolean {
         return try {
-            context.assets.open(filename).close()
+            attributionContext.assets.open(filename).close()
             true
         } catch (e: Exception) {
             false

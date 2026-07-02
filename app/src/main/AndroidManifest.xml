@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
+    <attribution android:tag="@string/empty_string" android:label="@string/audio_playback_attribution" />
+    <attribution android:tag="audioPlayback" android:label="@string/audio_playback_attribution" />
     <attribution android:tag="facebook" tools:node="remove" />
 
     <application

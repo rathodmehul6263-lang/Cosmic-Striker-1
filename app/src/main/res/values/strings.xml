@@ -4,4 +4,5 @@
     <string name="facebook_client_token">abcdef1234567890</string>
     <string name="fb_login_protocol_scheme">fb1234567890</string>
     <string name="empty_string"></string>
+    <string name="audio_playback_attribution">This app plays background music and game sound effects.</string>
 </resources>
