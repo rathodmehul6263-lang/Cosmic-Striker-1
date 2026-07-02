@@ -1,6 +1,8 @@
 {
   "name": "Cosmic Striker",
-  "description": "Retro futuristic HTML5 Space Shooter game!",
+  "description": "An action-packed cosmic arcade striker game with atmospheric background music and procedural synthesis.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

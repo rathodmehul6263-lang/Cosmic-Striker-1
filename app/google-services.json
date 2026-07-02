@@ -1,41 +1,41 @@
 {
   "project_info": {
-    "project_number": "248919173506",
-    "project_id": "cosmic-striker",
-    "storage_bucket": "cosmic-striker.firebasestorage.app"
+    "project_number": "942525706",
+    "project_id": "cosmic-striker-production",
+    "storage_bucket": "cosmic-striker-production.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:248919173506:android:31ff47ca169db652e2879b",
+        "mobilesdk_app_id": "1:942525706:android:b0902a44d68bda35d17ef3",
         "android_client_info": {
           "package_name": "com.example.cosmicstriker"
         }
       },
       "oauth_client": [
         {
-          "client_id": "248919173506-o7gihu2huc9tpmit5blbtvctkqakrm4v.apps.googleusercontent.com",
+          "client_id": "942525706-4pbrbcmvf4nrthja3mil14vqbfu2oomn.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.example.cosmicstriker",
-            "certificate_hash": "05b6f8fe7b7c1cdab6ad80e73b43895a5c3d0367"
+            "certificate_hash": "511373ea15c593af23c46bf810252efcd81ffb4b"
           }
         },
         {
-          "client_id": "248919173506-tpmu598s1mpq0oq1hb8b351n5t9bvae5.apps.googleusercontent.com",
+          "client_id": "942525706-5i2ku7qvrqk1a7brq4a9lvf1sik3k1pu.apps.googleusercontent.com",
           "client_type": 3
         }
       ],
       "api_key": [
         {
-          "current_key": "AIzaSyB7W2ltElDZ6yYW5DZIdV4wKXN2l3HsyV0"
+          "current_key": "AIzaSyA2JrH_2ei3WSOOHezKFTAQS_9WfCzFysI"
         }
       ],
       "services": {
         "appinvite_service": {
           "other_platform_oauth_client": [
             {
-              "client_id": "248919173506-tpmu598s1mpq0oq1hb8b351n5t9bvae5.apps.googleusercontent.com",
+              "client_id": "942525706-5i2ku7qvrqk1a7brq4a9lvf1sik3k1pu.apps.googleusercontent.com",
               "client_type": 3
             }
           ]
