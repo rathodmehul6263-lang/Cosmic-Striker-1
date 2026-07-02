@@ -946,12 +946,7 @@ class MainActivity : ComponentActivity() {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
-                val webViewContext = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                    ctx.createAttributionContext("audioPlayback")
-                } else {
-                    ctx
-                }
-                WebView(webViewContext).apply {
+                WebView(ctx).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
