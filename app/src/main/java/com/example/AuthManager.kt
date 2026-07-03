@@ -36,16 +36,17 @@ object AuthManager {
     private const val PREFS_NAME = "cosmic_striker_prefs"
 
     fun init(context: Context) {
+        val appContext = context.applicationContext
         callbackManager = CallbackManager.Factory.create()
         
         try {
-            FirebaseApp.initializeApp(context)
+            FirebaseApp.initializeApp(appContext)
         } catch (e: Exception) {
             Log.e("AuthManager", "FirebaseApp initialization failed", e)
         }
 
         val webClientId = try {
-            context.getString(R.string.default_web_client_id)
+            appContext.getString(R.string.default_web_client_id)
         } catch (e: Exception) {
             Log.e("AuthManager", "Failed to resolve R.string.default_web_client_id", e)
             ""
@@ -55,7 +56,7 @@ object AuthManager {
 
         if (webClientId.isEmpty()) {
             Log.e("AuthManager", "CRITICAL ERROR: default_web_client_id is missing! Ensure google-services.json is correctly configured.")
-            Toast.makeText(context, "Authentication Config Error: default_web_client_id is missing", Toast.LENGTH_LONG).show()
+            Toast.makeText(appContext, "Authentication Config Error: default_web_client_id is missing", Toast.LENGTH_LONG).show()
         }
 
         val gsoBuilder = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -66,10 +67,10 @@ object AuthManager {
             gsoBuilder.requestIdToken(webClientId)
         }
         
-        googleSignInClient = GoogleSignIn.getClient(context, gsoBuilder.build())
+        googleSignInClient = GoogleSignIn.getClient(appContext, gsoBuilder.build())
 
         // Auto-login if previously logged in (via Firebase Auth as single source of truth)
-        loadSession(context)
+        loadSession(appContext)
     }
 
     private fun loadSession(context: Context) {
