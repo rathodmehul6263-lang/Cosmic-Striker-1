@@ -363,7 +363,7 @@ class MainActivity : ComponentActivity() {
         try {
             com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
                 this,
-                listOf("email", "public_profile")
+                listOf("public_profile")
             )
         } catch (e: Exception) {
             Log.e("Auth", "Failed to start Facebook login", e)
