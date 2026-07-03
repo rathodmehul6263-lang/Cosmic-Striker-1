@@ -44,17 +44,30 @@ object AuthManager {
             Log.e("AuthManager", "FirebaseApp initialization failed", e)
         }
 
-        val resId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-        val webClientId = if (resId != 0) {
-            try {
-                context.getString(resId)
-            } catch (e: Exception) {
-                Log.e("AuthManager", "default_web_client_id lookup failed", e)
-                ""
+        val webClientId = try {
+            context.getString(R.string.default_web_client_id)
+        } catch (e: Exception) {
+            Log.e("AuthManager", "Direct R.string.default_web_client_id lookup failed, trying dynamic fallback", e)
+            val resId = context.resources.getIdentifier("default_web_client_id", "string", "com.example")
+            if (resId != 0) {
+                try {
+                    context.getString(resId)
+                } catch (ex: Exception) {
+                    ""
+                }
+            } else {
+                val appResId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
+                if (appResId != 0) {
+                    try {
+                        context.getString(appResId)
+                    } catch (ex: Exception) {
+                        ""
+                    }
+                } else ""
             }
-        } else {
-            ""
         }
+
+        Log.i("AuthManager", "Runtime config - default_web_client_id loaded: '$webClientId'")
 
         if (webClientId.isEmpty()) {
             Log.e("AuthManager", "CRITICAL ERROR: default_web_client_id is missing! Ensure google-services.json is correctly configured.")
