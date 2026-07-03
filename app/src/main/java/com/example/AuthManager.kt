@@ -47,24 +47,8 @@ object AuthManager {
         val webClientId = try {
             context.getString(R.string.default_web_client_id)
         } catch (e: Exception) {
-            Log.e("AuthManager", "Direct R.string.default_web_client_id lookup failed, trying dynamic fallback", e)
-            val resId = context.resources.getIdentifier("default_web_client_id", "string", "com.example")
-            if (resId != 0) {
-                try {
-                    context.getString(resId)
-                } catch (ex: Exception) {
-                    ""
-                }
-            } else {
-                val appResId = context.resources.getIdentifier("default_web_client_id", "string", context.packageName)
-                if (appResId != 0) {
-                    try {
-                        context.getString(appResId)
-                    } catch (ex: Exception) {
-                        ""
-                    }
-                } else ""
-            }
+            Log.e("AuthManager", "Failed to resolve R.string.default_web_client_id", e)
+            ""
         }
 
         Log.i("AuthManager", "Runtime config - default_web_client_id loaded: '$webClientId'")
