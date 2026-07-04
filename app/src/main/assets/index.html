@@ -36,7 +36,7 @@
             display: block;
             width: 100%;
             height: 100%;
-            background: radial-gradient(circle at center, #0a0a28 0%, #020208 100%);
+            background: #000000;
         }
 
         /* Responsive UI Overlays */
@@ -895,9 +895,9 @@
         const bossHud = document.getElementById('boss-hud');
 
         // Configurable Parameters
-        const SPAWN_INTERVAL_BASE = 1200; // Starting spawns in ms
+        const SPAWN_INTERVAL_BASE = 1600; // Starting spawns in ms
         const BULLET_COOLDOWN = 300;     // Shooting frequency
-        const STAR_COUNT = 100;
+        const STAR_COUNT = 30;
 
         // --- 50 Level Definitions with Gradual Difficulty Scaling ---
         const LEVELS = {};
@@ -915,8 +915,8 @@
         ];
         for (let l = 1; l <= 50; l++) {
             let targetKills = 25 + l * 5;
-            let spawnRate = Math.max(450, 1600 - l * 25);
-            let speeds = 1.0 + l * 0.08;
+            let spawnRate = Math.max(900, 2000 - l * 35);
+            let speeds = 0.85 + l * 0.03;
             let boss = false;
             
             if (l === 5) { boss = "Krell Dreadnought"; targetKills = 30; }
@@ -1758,8 +1758,37 @@
                 this.y = y;
                 this.vx = vx;
                 this.vy = vy;
-                this.size = size;
-                this.color = color;
+
+                // Remap colors to highly visible bright red, orange, or neon purple
+                let c = color.toLowerCase();
+                let finalColor = '#ff003c'; // Default bright red
+
+                if (c.includes('00e5ff') || c.includes('00f0ff') || c.includes('0044ff') || c.includes('ffffff') || c.includes('ff007f') || c.includes('bb00ff') || c.includes('ff00ff') || c.includes('d500f9')) {
+                    // Cyan, blue, white, pink, magenta -> Neon Purple
+                    finalColor = '#e040fb';
+                } else if (c.includes('76ff03') || c.includes('39ff14') || c.includes('00e676') || c.includes('ffd700') || c.includes('ffea00') || c.includes('ff5500') || c.includes('ff4500') || c.includes('ffaa00') || c.includes('ff3300') || c.includes('ff6d00')) {
+                    // Green, yellow, gold, light orange -> Bright Orange
+                    finalColor = '#ff6d00';
+                } else {
+                    // Red-ish -> Bright Red
+                    finalColor = '#ff003c';
+                }
+
+                this.color = finalColor;
+
+                // Make enemy bullets larger and brighter
+                let baseSize = size;
+                if (type === 'normal' || type === 'shrapnel') {
+                    baseSize = Math.max(7.5, size * 1.5);
+                } else if (type === 'blast' || type === 'mine') {
+                    baseSize = Math.max(12, size * 1.5);
+                } else if (type === 'missile') {
+                    baseSize = Math.max(9, size * 1.4);
+                } else {
+                    baseSize = Math.max(7, size * 1.4);
+                }
+
+                this.size = baseSize;
                 this.type = type;
                 this.damage = damage;
                 this.timer = 0;
@@ -1818,6 +1847,9 @@
             }
             draw() {
                 ctx.save();
+                // Add a small glow effect
+                ctx.shadowColor = this.color;
+                ctx.shadowBlur = 8;
                 if (this.type === 'missile') {
                     // Draw small missile with flames
                     ctx.translate(this.x, this.y);
@@ -1991,22 +2023,37 @@
                 this.active = true;
                 
                 // Decide which types are available in this level based on requirements:
-                // - Early levels (levels 1-5): mostly Scout and Fighter ships.
-                // - Medium levels (levels 6-15): introduce Heavy Cruisers, Snipers, and Kamikaze ships.
-                // - Higher levels (levels 16+): include Missile Carriers, Stealth Ships, and Elite Battleships.
+                // - Levels 1–6: Enemy Type 1 (scout) only.
+                // - Level 7: Unlock Enemy Type 2 (fighter).
+                // - Level 14: Unlock Enemy Type 3 (heavy_cruiser).
+                // - Level 21: Unlock Enemy Type 4 (kamikaze_alien).
+                // - Level 28: Unlock Enemy Type 5 (sniper).
+                // - Level 35: Unlock Enemy Type 6 (stealth).
+                // - Level 42: Unlock Enemy Type 7 (missile_carrier).
+                // - Level 48: Unlock Enemy Type 8 (elite_battleship).
                 let choicePool = [];
-                if (currentLevel < 6) {
+                if (currentLevel < 7) {
+                    choicePool = ['scout'];
+                } else if (currentLevel < 14) {
                     choicePool = ['scout', 'scout', 'scout', 'fighter', 'fighter'];
-                } else if (currentLevel < 16) {
-                    choicePool = ['scout', 'fighter', 'fighter', 'heavy_cruiser', 'kamikaze_alien', 'sniper'];
+                } else if (currentLevel < 21) {
+                    choicePool = ['scout', 'scout', 'fighter', 'fighter', 'heavy_cruiser'];
+                } else if (currentLevel < 28) {
+                    choicePool = ['scout', 'scout', 'fighter', 'fighter', 'heavy_cruiser', 'kamikaze_alien'];
+                } else if (currentLevel < 35) {
+                    choicePool = ['scout', 'scout', 'fighter', 'fighter', 'heavy_cruiser', 'kamikaze_alien', 'sniper'];
+                } else if (currentLevel < 42) {
+                    choicePool = ['scout', 'scout', 'fighter', 'fighter', 'heavy_cruiser', 'kamikaze_alien', 'sniper', 'stealth'];
+                } else if (currentLevel < 48) {
+                    choicePool = ['scout', 'scout', 'fighter', 'fighter', 'heavy_cruiser', 'kamikaze_alien', 'sniper', 'stealth', 'missile_carrier'];
                 } else {
-                    choicePool = ['scout', 'fighter', 'heavy_cruiser', 'kamikaze_alien', 'sniper', 'stealth', 'missile_carrier', 'elite_battleship'];
+                    choicePool = ['scout', 'scout', 'scout', 'fighter', 'fighter', 'heavy_cruiser', 'kamikaze_alien', 'sniper', 'stealth', 'missile_carrier', 'elite_battleship'];
                 }
 
                 this.type = choicePool[Math.floor(Math.random() * choicePool.length)];
                 
-                // Cooldown and timing
-                this.shootCooldown = Math.random() * 2000 + 1000;
+                // Cooldown and timing - make initial shot delayed so players have time to react
+                this.shootCooldown = Math.random() * 3000 + 1500;
                 this.angle = Math.random() * Math.PI;
                 this.sineOffset = Math.random() * 1000;
                 this.stealthTimer = Math.random() * 1000;
@@ -2106,7 +2153,7 @@
                     this.x += Math.sin(this.y * 0.1 + this.sineOffset) * 1.5 * this.sineDir * modifier;
                     this.shootCooldown -= dt;
                     if (this.shootCooldown <= 0) {
-                        this.shootCooldown = 4000 + Math.random() * 2000;
+                        this.shootCooldown = 5000 + Math.random() * 2500;
                         // Fire single weak small normal laser downwards
                         spawnEnemyBullet(this.x, this.y + this.height/2, 0, 4.0, 'normal', this.color, 3.5, 1);
                     }
@@ -2114,13 +2161,13 @@
                     this.x += Math.sin(this.y * 0.04 + this.sineOffset) * 2.0 * this.sineDir * modifier;
                     this.shootCooldown -= dt;
                     if (this.shootCooldown <= 0) {
-                        this.shootCooldown = 1800 + Math.random() * 1000;
+                        this.shootCooldown = 3200 + Math.random() * 1800;
                         spawnEnemyBullet(this.x, this.y + this.height/2, 0, 5.0, 'normal', this.color, 5, 1);
                     }
                 } else if (this.type === 'heavy_cruiser') {
                     this.shootCooldown -= dt;
                     if (this.shootCooldown <= 0) {
-                        this.shootCooldown = 2200 + Math.random() * 800;
+                        this.shootCooldown = 3800 + Math.random() * 1500;
                         // 2-way heavy blast shot
                         spawnEnemyBullet(this.x - 12, this.y + this.height/2, -1.0, 4.5, 'blast', this.color, 7, 1);
                         spawnEnemyBullet(this.x + 12, this.y + this.height/2, 1.0, 4.5, 'blast', this.color, 7, 1);
@@ -2142,7 +2189,7 @@
                             this.y += this.speed * 0.8 * modifier;
                         } else {
                             this.sniperState = 'hover';
-                            this.shootCooldown = 1000 + Math.random() * 1000;
+                            this.shootCooldown = 1500 + Math.random() * 1500;
                         }
                     } else if (this.sniperState === 'hover') {
                         // Prevent the ship from advancing vertically, but make sure it holds Y
@@ -2155,7 +2202,7 @@
                         this.shootCooldown -= dt;
                         if (this.shootCooldown <= 0) {
                             this.sniperChargeTimer += dt;
-                            if (this.sniperChargeTimer >= 800) { // 0.8s charging visual
+                            if (this.sniperChargeTimer >= 1000) { // 1.0s charging visual
                                 // Fire super-fast direct laser shot towards player
                                 const dxToP = player.x - this.x;
                                 const dyToP = player.y - this.y;
@@ -2168,7 +2215,7 @@
 
                                 this.sniperChargeTimer = 0;
                                 this.sniperFireCount++;
-                                this.shootCooldown = 2000 + Math.random() * 1000;
+                                this.shootCooldown = 3200 + Math.random() * 1500;
 
                                 if (this.sniperFireCount >= 2) {
                                     this.sniperState = 'retreat';
@@ -2186,7 +2233,7 @@
 
                     this.shootCooldown -= dt;
                     if (this.shootCooldown <= 0) {
-                        this.shootCooldown = 2500 + Math.random() * 1000;
+                        this.shootCooldown = 4000 + Math.random() * 2000;
                         // Fires only when reasonably visible
                         if (this.opacity > 0.45) {
                             // Fire 3-way spread laser
@@ -2198,7 +2245,7 @@
                 } else if (this.type === 'missile_carrier') {
                     this.shootCooldown -= dt;
                     if (this.shootCooldown <= 0) {
-                        this.shootCooldown = 3200 + Math.random() * 1200;
+                        this.shootCooldown = 4500 + Math.random() * 2000;
                         // Spawn a homing missile
                         spawnEnemyBullet(this.x, this.y + this.height/2, 0, 2.5, 'missile', '#ff1744', 6, 1);
                         if (typeof sound.playBossMissile === 'function') {
@@ -2211,7 +2258,7 @@
                     
                     this.shootCooldown -= dt;
                     if (this.shootCooldown <= 0) {
-                        this.shootCooldown = 2400 + Math.random() * 1200;
+                        this.shootCooldown = 3800 + Math.random() * 2000;
                         const pattern = Math.floor(Math.random() * 3);
                         if (pattern === 0) {
                             // 3-way spread lasers
@@ -4232,8 +4279,13 @@
                         } else {
                             const currentRate = LEVELS[currentLevel]?.spawnRate || SPAWN_INTERVAL_BASE;
                             if (timestamp - lastSpawnTime >= currentRate) {
-                                spawnEnemy();
-                                lastSpawnTime = timestamp;
+                                const activeCount = enemies.filter(e => e.active).length;
+                                // Limit max active normal enemies based on level to ensure fairness
+                                const maxActiveAllowed = Math.min(6, 3 + Math.floor(currentLevel / 10));
+                                if (activeCount < maxActiveAllowed) {
+                                    spawnEnemy();
+                                    lastSpawnTime = timestamp;
+                                }
                             }
                         }
                     }
