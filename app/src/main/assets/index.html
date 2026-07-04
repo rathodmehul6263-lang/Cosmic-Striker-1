@@ -1970,112 +1970,263 @@
                 this.color = '';
                 this.scoreVal = 0;
                 this.hp = 0;
-                this.type = 'striker';
+                this.type = 'scout';
                 this.shootCooldown = 0;
                 this.angle = 0;
                 this.sineDir = 1;
+                this.sineOffset = 0;
+                this.vx = 0;
+                this.vy = 0;
+                this.shield = 0;
+                this.shieldMax = 0;
+                this.opacity = 1.0;
+                this.stealthTimer = 0;
+                this.sniperChargeTimer = 0;
+                this.sniperState = 'descend'; // 'descend' | 'hover' | 'retreat'
+                this.sniperTargetY = 0;
+                this.sniperFireCount = 0;
             }
 
             init() {
                 this.active = true;
-                const types = ['striker', 'weaver', 'zigzagger', 'hunter', 'kamikaze', 'elite', 'meteor'];
-                // Choose type based on current unlocked levels
-                let choicePool = ['striker'];
-                if (currentLevel >= 2) choicePool.push('weaver');
-                if (currentLevel >= 3) choicePool.push('zigzagger', 'meteor');
-                if (currentLevel >= 4) choicePool.push('hunter', 'elite');
-                if (currentLevel >= 6) choicePool.push('kamikaze');
                 
+                // Decide which types are available in this level based on requirements:
+                // - Early levels (levels 1-5): mostly Scout and Fighter ships.
+                // - Medium levels (levels 6-15): introduce Heavy Cruisers, Snipers, and Kamikaze ships.
+                // - Higher levels (levels 16+): include Missile Carriers, Stealth Ships, and Elite Battleships.
+                let choicePool = [];
+                if (currentLevel < 6) {
+                    choicePool = ['scout', 'scout', 'scout', 'fighter', 'fighter'];
+                } else if (currentLevel < 16) {
+                    choicePool = ['scout', 'fighter', 'fighter', 'heavy_cruiser', 'kamikaze_alien', 'sniper'];
+                } else {
+                    choicePool = ['scout', 'fighter', 'heavy_cruiser', 'kamikaze_alien', 'sniper', 'stealth', 'missile_carrier', 'elite_battleship'];
+                }
+
                 this.type = choicePool[Math.floor(Math.random() * choicePool.length)];
+                
+                // Cooldown and timing
                 this.shootCooldown = Math.random() * 2000 + 1000;
                 this.angle = Math.random() * Math.PI;
+                this.sineOffset = Math.random() * 1000;
+                this.stealthTimer = Math.random() * 1000;
+                this.sniperChargeTimer = 0;
+                this.sniperState = 'descend';
+                this.sniperTargetY = Math.random() * 120 + 80; // random height between 80 and 200
+                this.sniperFireCount = 0;
 
                 const lvlSpeedMult = LEVELS[currentLevel]?.speeds || 1.0;
 
-                if (this.type === 'striker') {
-                    this.width = Math.random() * 8 + 26;
-                    this.height = this.width;
+                if (this.type === 'scout') {
+                    // Scout Ship – Very fast, low health, weak weapon.
+                    this.width = 24;
                     this.hp = 1;
                     this.scoreVal = 10;
-                    this.color = '#ff0055';
-                    this.speed = (Math.random() * 1.5 + 1.2) * lvlSpeedMult;
+                    this.color = '#00e5ff'; // cyan
+                    this.speed = (Math.random() * 1.5 + 2.2) * lvlSpeedMult; // very fast
                     this.x = Math.random() * (canvas.width - 60) + 30;
-                } else if (this.type === 'weaver') {
-                    this.width = 30;
-                    this.height = 30;
-                    this.hp = 1.5;
-                    this.scoreVal = 15;
-                    this.color = '#00ffaa';
-                    this.speed = (Math.random() * 1.0 + 1.0) * lvlSpeedMult;
-                    this.x = Math.random() * (canvas.width - 100) + 50;
                     this.sineDir = Math.random() < 0.5 ? 1 : -1;
-                } else if (this.type === 'zigzagger') {
-                    this.width = 28;
-                    this.height = 28;
-                    this.hp = 1;
-                    this.scoreVal = 20;
-                    this.color = '#ffaa00';
-                    this.speed = (Math.random() * 1.3 + 1.5) * lvlSpeedMult;
-                    this.x = Math.random() * (canvas.width - 80) + 40;
-                    this.vx = Math.random() < 0.5 ? -2 : 2;
-                } else if (this.type === 'hunter') {
-                    this.width = 32;
-                    this.height = 32;
-                    this.hp = 2;
-                    this.scoreVal = 25;
-                    this.color = '#ff00ff';
-                    this.speed = (Math.random() * 0.8 + 0.8) * lvlSpeedMult;
+                } else if (this.type === 'fighter') {
+                    // Fighter Ship – Medium speed, medium health, shoots single lasers.
+                    this.width = 30;
+                    this.hp = 2.5;
+                    this.scoreVal = 18;
+                    this.color = '#ff3d00'; // orange
+                    this.speed = (Math.random() * 0.4 + 1.3) * lvlSpeedMult; // medium speed
                     this.x = Math.random() * (canvas.width - 60) + 30;
-                } else if (this.type === 'kamikaze') {
-                    this.width = 24;
-                    this.height = 24;
-                    this.hp = 1;
-                    this.scoreVal = 30;
-                    this.color = '#ff5500';
-                    this.speed = (Math.random() * 1.8 + 2.5) * lvlSpeedMult;
-                    this.x = Math.random() * (canvas.width - 60) + 30;
-                } else if (this.type === 'elite') {
-                    this.width = 36;
-                    this.height = 36;
-                    this.hp = 3;
-                    this.scoreVal = 40;
-                    this.color = '#ffff00';
-                    this.speed = (Math.random() * 0.6 + 0.7) * lvlSpeedMult;
-                    this.x = Math.random() * (canvas.width - 80) + 40;
-                } else if (this.type === 'meteor') {
-                    this.width = Math.random() * 20 + 40; // massive size 40-60px
-                    this.height = this.width;
-                    this.hp = 5;
-                    this.scoreVal = 50;
-                    this.color = '#8e8e8e';
-                    this.speed = (Math.random() * 0.5 + 0.6) * lvlSpeedMult;
+                    this.sineDir = Math.random() < 0.5 ? 1 : -1;
+                } else if (this.type === 'heavy_cruiser') {
+                    // Heavy Cruiser – Slow movement, high health, powerful attacks.
+                    this.width = 44;
+                    this.hp = 7;
+                    this.scoreVal = 35;
+                    this.color = '#76ff03'; // lime green
+                    this.speed = (Math.random() * 0.2 + 0.6) * lvlSpeedMult; // slow
                     this.x = Math.random() * (canvas.width - 100) + 50;
+                } else if (this.type === 'kamikaze_alien') {
+                    // Kamikaze Ship – Charges directly toward the player and explodes on impact.
+                    this.width = 26;
+                    this.hp = 1.5;
+                    this.scoreVal = 25;
+                    this.color = '#ffea00'; // yellow/gold
+                    this.speed = (Math.random() * 0.5 + 1.8) * lvlSpeedMult;
+                    this.x = Math.random() * (canvas.width - 60) + 30;
+                    this.vx = 0;
+                } else if (this.type === 'sniper') {
+                    // Sniper Ship – Keeps distance and fires long-range laser shots.
+                    this.width = 32;
+                    this.hp = 3;
+                    this.scoreVal = 30;
+                    this.color = '#d500f9'; // magenta/purple
+                    this.speed = (Math.random() * 0.3 + 1.0) * lvlSpeedMult;
+                    this.x = Math.random() * (canvas.width - 80) + 40;
+                } else if (this.type === 'stealth') {
+                    // Stealth Ship – Periodically becomes semi-transparent or invisible before attacking.
+                    this.width = 32;
+                    this.hp = 4;
+                    this.scoreVal = 40;
+                    this.color = '#607d8b'; // steel blue
+                    this.speed = (Math.random() * 0.3 + 1.1) * lvlSpeedMult;
+                    this.x = Math.random() * (canvas.width - 80) + 40;
+                    this.opacity = 1.0;
+                } else if (this.type === 'missile_carrier') {
+                    // Missile Carrier – Launches homing missiles at intervals.
+                    this.width = 40;
+                    this.hp = 6;
+                    this.scoreVal = 50;
+                    this.color = '#ff1744'; // ruby red
+                    this.speed = (Math.random() * 0.2 + 0.8) * lvlSpeedMult;
+                    this.x = Math.random() * (canvas.width - 90) + 45;
+                } else if (this.type === 'elite_battleship') {
+                    // Elite Battleship – Rare enemy with very high health, shield, and multiple attack patterns.
+                    this.width = 48;
+                    this.hp = 12;
+                    this.scoreVal = 80;
+                    this.color = '#00e676'; // cyber emerald
+                    this.speed = (Math.random() * 0.2 + 0.5) * lvlSpeedMult; // very slow
+                    this.x = Math.random() * (canvas.width - 100) + 50;
+                    this.shieldMax = 4;
+                    this.shield = 4; // active shield absorbtion
+                    this.sineDir = Math.random() < 0.5 ? 1 : -1;
                 }
+
                 this.height = this.width;
                 this.y = -this.height;
             }
 
             update(dt) {
                 const modifier = dt / 16.66;
-                this.y += this.speed * modifier;
 
-                if (this.type === 'weaver') {
-                    this.x += Math.sin(this.y * 0.05) * 2.5 * this.sineDir * modifier;
-                } else if (this.type === 'zigzagger') {
-                    this.x += this.vx * modifier;
-                    if (this.x < this.width || this.x > canvas.width - this.width) {
-                        this.vx = -this.vx;
-                    }
-                } else if (this.type === 'hunter') {
-                    // Slowly drift horizontally towards player
-                    const dx = player.x - this.x;
-                    this.x += Math.sign(dx) * 1.2 * modifier;
-                } else if (this.type === 'elite') {
-                    // Shoot projectile straight down
+                // Move downwards unless sniper is in hover state
+                if (this.type !== 'sniper' || this.sniperState !== 'hover') {
+                    this.y += this.speed * modifier;
+                }
+
+                if (this.type === 'scout') {
+                    this.x += Math.sin(this.y * 0.1 + this.sineOffset) * 1.5 * this.sineDir * modifier;
                     this.shootCooldown -= dt;
                     if (this.shootCooldown <= 0) {
-                        this.shootCooldown = 2200 + Math.random() * 1000;
-                        spawnEnemyBullet(this.x, this.y + this.height / 2, 0, 4.5);
+                        this.shootCooldown = 4000 + Math.random() * 2000;
+                        // Fire single weak small normal laser downwards
+                        spawnEnemyBullet(this.x, this.y + this.height/2, 0, 4.0, 'normal', this.color, 3.5, 1);
+                    }
+                } else if (this.type === 'fighter') {
+                    this.x += Math.sin(this.y * 0.04 + this.sineOffset) * 2.0 * this.sineDir * modifier;
+                    this.shootCooldown -= dt;
+                    if (this.shootCooldown <= 0) {
+                        this.shootCooldown = 1800 + Math.random() * 1000;
+                        spawnEnemyBullet(this.x, this.y + this.height/2, 0, 5.0, 'normal', this.color, 5, 1);
+                    }
+                } else if (this.type === 'heavy_cruiser') {
+                    this.shootCooldown -= dt;
+                    if (this.shootCooldown <= 0) {
+                        this.shootCooldown = 2200 + Math.random() * 800;
+                        // 2-way heavy blast shot
+                        spawnEnemyBullet(this.x - 12, this.y + this.height/2, -1.0, 4.5, 'blast', this.color, 7, 1);
+                        spawnEnemyBullet(this.x + 12, this.y + this.height/2, 1.0, 4.5, 'blast', this.color, 7, 1);
+                    }
+                } else if (this.type === 'kamikaze_alien') {
+                    const dx = player.x - this.x;
+                    const distToPlayer = Math.hypot(player.x - this.x, player.y - this.y);
+                    if (distToPlayer < 400) {
+                        this.vx = Math.sign(dx) * 2.8 * modifier;
+                        this.y += 1.2 * modifier; // speed boost
+                    } else {
+                        this.vx = Math.sign(dx) * 1.0 * modifier;
+                    }
+                    this.x += this.vx;
+                } else if (this.type === 'sniper') {
+                    if (this.sniperState === 'descend') {
+                        // Descend to target Y height
+                        if (this.y < this.sniperTargetY) {
+                            this.y += this.speed * 0.8 * modifier;
+                        } else {
+                            this.sniperState = 'hover';
+                            this.shootCooldown = 1000 + Math.random() * 1000;
+                        }
+                    } else if (this.sniperState === 'hover') {
+                        // Prevent the ship from advancing vertically, but make sure it holds Y
+                        this.y = this.sniperTargetY;
+                        
+                        // Slowly slide horizontally to align with player
+                        const dx = player.x - this.x;
+                        this.x += Math.sign(dx) * 0.8 * modifier;
+
+                        this.shootCooldown -= dt;
+                        if (this.shootCooldown <= 0) {
+                            this.sniperChargeTimer += dt;
+                            if (this.sniperChargeTimer >= 800) { // 0.8s charging visual
+                                // Fire super-fast direct laser shot towards player
+                                const dxToP = player.x - this.x;
+                                const dyToP = player.y - this.y;
+                                const angleToP = Math.atan2(dyToP, dxToP);
+                                const projVx = Math.cos(angleToP) * 8.5;
+                                const projVy = Math.sin(angleToP) * 8.5;
+                                
+                                spawnEnemyBullet(this.x, this.y + this.height/2, projVx, projVy, 'normal', '#ffffff', 4, 1.5);
+                                spawnExplosion(this.x, this.y + this.height/2, this.color, 4); // fire burst
+
+                                this.sniperChargeTimer = 0;
+                                this.sniperFireCount++;
+                                this.shootCooldown = 2000 + Math.random() * 1000;
+
+                                if (this.sniperFireCount >= 2) {
+                                    this.sniperState = 'retreat';
+                                }
+                            }
+                        }
+                    } else if (this.sniperState === 'retreat') {
+                        // Move down quickly to retreat off-screen or exit
+                        this.y += this.speed * 1.8 * modifier;
+                    }
+                } else if (this.type === 'stealth') {
+                    this.stealthTimer += dt;
+                    // Oscillate opacity between 0.1 and 1.0 over a 3-second cycle
+                    this.opacity = 0.55 + Math.sin(this.stealthTimer * 0.003) * 0.45;
+
+                    this.shootCooldown -= dt;
+                    if (this.shootCooldown <= 0) {
+                        this.shootCooldown = 2500 + Math.random() * 1000;
+                        // Fires only when reasonably visible
+                        if (this.opacity > 0.45) {
+                            // Fire 3-way spread laser
+                            spawnEnemyBullet(this.x, this.y + this.height/2, -1.5, 4.5, 'normal', '#00f0ff', 4, 1);
+                            spawnEnemyBullet(this.x, this.y + this.height/2, 0, 5.0, 'normal', '#00f0ff', 4.5, 1);
+                            spawnEnemyBullet(this.x, this.y + this.height/2, 1.5, 4.5, 'normal', '#00f0ff', 4, 1);
+                        }
+                    }
+                } else if (this.type === 'missile_carrier') {
+                    this.shootCooldown -= dt;
+                    if (this.shootCooldown <= 0) {
+                        this.shootCooldown = 3200 + Math.random() * 1200;
+                        // Spawn a homing missile
+                        spawnEnemyBullet(this.x, this.y + this.height/2, 0, 2.5, 'missile', '#ff1744', 6, 1);
+                        if (typeof sound.playBossMissile === 'function') {
+                            sound.playBossMissile();
+                        }
+                    }
+                } else if (this.type === 'elite_battleship') {
+                    // Slow horizontal weaving
+                    this.x += Math.sin(this.y * 0.03 + this.sineOffset) * 1.2 * this.sineDir * modifier;
+                    
+                    this.shootCooldown -= dt;
+                    if (this.shootCooldown <= 0) {
+                        this.shootCooldown = 2400 + Math.random() * 1200;
+                        const pattern = Math.floor(Math.random() * 3);
+                        if (pattern === 0) {
+                            // 3-way spread lasers
+                            spawnEnemyBullet(this.x, this.y + this.height/2, -1.8, 4.5, 'normal', '#00e676', 5, 1);
+                            spawnEnemyBullet(this.x, this.y + this.height/2, 0, 5.0, 'normal', '#00e676', 5, 1);
+                            spawnEnemyBullet(this.x, this.y + this.height/2, 1.8, 4.5, 'normal', '#00e676', 5, 1);
+                        } else if (pattern === 1) {
+                            // Launches a homing missile
+                            spawnEnemyBullet(this.x, this.y + this.height/2, 0, 2.5, 'missile', '#ff1744', 6, 1);
+                            if (typeof sound.playBossMissile === 'function') sound.playBossMissile();
+                        } else {
+                            // Drops a warning mine
+                            spawnEnemyBullet(this.x, this.y + this.height/2, 0, 1.5, 'mine', '#ff3300', 8, 1);
+                            if (typeof sound.playBossMissile === 'function') sound.playBossMissile();
+                        }
                     }
                 }
 
@@ -2095,54 +2246,181 @@
 
                 const r = this.width / 2;
 
-                if (this.type === 'meteor') {
-                    // Draw a jagged polygon rock shape
+                if (this.type === 'scout') {
+                    // Scout: Dual sharp wings pointing forward, compact body
                     ctx.beginPath();
-                    for (let i = 0; i < 8; i++) {
-                        const angle = (i / 8) * Math.PI * 2;
-                        const dist = r * (0.85 + Math.sin(angle * 3) * 0.15);
-                        const px = this.x + Math.cos(angle) * dist;
-                        const py = this.y + Math.sin(angle) * dist;
-                        if (i === 0) ctx.moveTo(px, py);
-                        else ctx.lineTo(px, py);
+                    ctx.moveTo(this.x, this.y + r); // Nose
+                    ctx.lineTo(this.x - r, this.y - r / 2); // Left tip
+                    ctx.lineTo(this.x - r / 3, this.y - r / 3); // Left rear
+                    ctx.lineTo(this.x, this.y - r); // Rear center
+                    ctx.lineTo(this.x + r / 3, this.y - r / 3); // Right rear
+                    ctx.lineTo(this.x + r, this.y - r / 2); // Right tip
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Thruster glow
+                    ctx.fillStyle = 'rgba(0, 229, 255, 0.4)';
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y - r * 0.8, r * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (this.type === 'fighter') {
+                    // Fighter: Forward swept wings with center cockpit
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y + r); // cockpit nose
+                    ctx.lineTo(this.x - r * 0.8, this.y); // left wing connector
+                    ctx.lineTo(this.x - r, this.y - r); // left wing tip
+                    ctx.lineTo(this.x - r * 0.3, this.y - r * 0.5); // left inner
+                    ctx.lineTo(this.x, this.y - r); // back center
+                    ctx.lineTo(this.x + r * 0.3, this.y - r * 0.5); // right inner
+                    ctx.lineTo(this.x + r, this.y - r); // right wing tip
+                    ctx.lineTo(this.x + r * 0.8, this.y); // right wing connector
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Fighter cockpit glow
+                    ctx.fillStyle = '#ff9100';
+                    ctx.beginPath();
+                    ctx.ellipse(this.x, this.y + r * 0.2, r * 0.25, r * 0.4, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (this.type === 'heavy_cruiser') {
+                    // Heavy Cruiser: Hexagonal shape, wide, armored plates
+                    ctx.beginPath();
+                    ctx.moveTo(this.x - r * 0.5, this.y + r); // Flat broad front left
+                    ctx.lineTo(this.x + r * 0.5, this.y + r); // Flat broad front right
+                    ctx.lineTo(this.x + r, this.y + r * 0.3); // Right flank
+                    ctx.lineTo(this.x + r * 0.8, this.y - r); // Right rear
+                    ctx.lineTo(this.x, this.y - r * 0.6); // Inner rear indenture
+                    ctx.lineTo(this.x - r * 0.8, this.y - r); // Left rear
+                    ctx.lineTo(this.x - r, this.y + r * 0.3); // Left flank
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Core power unit
+                    ctx.fillStyle = '#76ff03';
+                    ctx.fillRect(this.x - r * 0.25, this.y - r * 0.2, r * 0.5, r * 0.4);
+                } else if (this.type === 'kamikaze_alien') {
+                    // Kamikaze: Arrowhead spear, very sharp, trailing lines
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y + r); // extreme front point
+                    ctx.lineTo(this.x - r, this.y - r); // back left wing
+                    ctx.lineTo(this.x, this.y - r * 0.3); // back center indent
+                    ctx.lineTo(this.x + r, this.y - r); // back right wing
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Combustion flame/energy core at the back
+                    const kGlow = ctx.createRadialGradient(this.x, this.y - r * 0.1, 1, this.x, this.y - r * 0.1, r * 0.7);
+                    kGlow.addColorStop(0, '#ffffff');
+                    kGlow.addColorStop(0.4, '#ffea00');
+                    kGlow.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.fillStyle = kGlow;
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y - r * 0.1, r * 0.7, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (this.type === 'sniper') {
+                    // Sniper: Long needle center rail with flanking stabilizers
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y + r); // sniper muzzle front
+                    ctx.lineTo(this.x - r * 0.3, this.y + r * 0.2); // center left
+                    ctx.lineTo(this.x - r, this.y - r * 0.8); // left tip
+                    ctx.lineTo(this.x - r * 0.4, this.y - r * 0.6); // inner stabilizer
+                    ctx.lineTo(this.x, this.y - r); // back apex
+                    ctx.lineTo(this.x + r * 0.4, this.y - r * 0.6); // inner stabilizer
+                    ctx.lineTo(this.x + r, this.y - r * 0.8); // right tip
+                    ctx.lineTo(this.x + r * 0.3, this.y + r * 0.2); // center right
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Charging beam visualization when about to fire
+                    if (this.sniperState === 'hover' && this.sniperChargeTimer > 0) {
+                        const chargeRatio = Math.min(1.0, this.sniperChargeTimer / 800);
+                        ctx.fillStyle = '#ffffff';
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y + r, r * 0.35 * chargeRatio, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        ctx.strokeStyle = '#d500f9';
+                        ctx.lineWidth = 1.5;
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y + r, r * 0.6 * chargeRatio, 0, Math.PI * 2);
+                        ctx.stroke();
                     }
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-                } else if (this.type === 'elite') {
-                    // Futuristic hex star
+                } else if (this.type === 'stealth') {
+                    ctx.globalAlpha = this.opacity;
+                    
+                    // Stealth: Angular sleek wings
                     ctx.beginPath();
-                    ctx.moveTo(this.x, this.y - r);
-                    ctx.lineTo(this.x - r, this.y - r / 2);
-                    ctx.lineTo(this.x - r / 2, this.y + r / 2);
-                    ctx.lineTo(this.x - r, this.y + r);
-                    ctx.lineTo(this.x, this.y + r / 2);
-                    ctx.lineTo(this.x + r, this.y + r);
-                    ctx.lineTo(this.x + r / 2, this.y + r / 2);
-                    ctx.lineTo(this.x + r, this.y - r / 2);
+                    ctx.moveTo(this.x, this.y + r * 0.8); // nose
+                    ctx.lineTo(this.x - r, this.y - r * 0.4); // left sweep
+                    ctx.lineTo(this.x - r * 0.6, this.y - r * 0.8); // left back stabilizer
+                    ctx.lineTo(this.x, this.y - r * 0.4); // back center
+                    ctx.lineTo(this.x + r * 0.6, this.y - r * 0.8); // right back stabilizer
+                    ctx.lineTo(this.x + r, this.y - r * 0.4); // right sweep
                     ctx.closePath();
                     ctx.fill();
                     ctx.stroke();
-                } else if (this.type === 'kamikaze') {
-                    // Sleek sharp delta wing
+
+                    // Engines glow (flickers slightly)
+                    if (Math.random() < 0.8) {
+                        ctx.fillStyle = 'rgba(96, 125, 139, 0.6)';
+                        ctx.fillRect(this.x - r * 0.5, this.y - r * 0.9, r * 0.2, r * 0.2);
+                        ctx.fillRect(this.x + r * 0.3, this.y - r * 0.9, r * 0.2, r * 0.2);
+                    }
+                    ctx.globalAlpha = 1.0; // Reset alpha
+                } else if (this.type === 'missile_carrier') {
+                    // Missile Carrier: Wide double-body structure
                     ctx.beginPath();
-                    ctx.moveTo(this.x, this.y + r);
-                    ctx.lineTo(this.x - r, this.y - r);
-                    ctx.lineTo(this.x, this.y - r / 3);
-                    ctx.lineTo(this.x + r, this.y - r);
+                    ctx.moveTo(this.x - r * 0.4, this.y + r); // center nose left
+                    ctx.lineTo(this.x + r * 0.4, this.y + r); // center nose right
+                    ctx.lineTo(this.x + r, this.y + r * 0.1); // right launcher bay outer
+                    ctx.lineTo(this.x + r * 0.8, this.y - r); // right engine outer
+                    ctx.lineTo(this.x + r * 0.2, this.y - r * 0.5); // inner bay right
+                    ctx.lineTo(this.x, this.y - r * 0.8); // center rear
+                    ctx.lineTo(this.x - r * 0.2, this.y - r * 0.5); // inner bay left
+                    ctx.lineTo(this.x - r * 0.8, this.y - r); // left engine outer
+                    ctx.lineTo(this.x - r, this.y + r * 0.1); // left launcher bay outer
                     ctx.closePath();
                     ctx.fill();
                     ctx.stroke();
-                } else {
-                    // Classic alien striker/weaver wing style
+
+                    // Draw launcher bays
+                    ctx.fillStyle = '#ff1744';
+                    ctx.fillRect(this.x - r * 0.85, this.y - r * 0.1, r * 0.2, r * 0.4);
+                    ctx.fillRect(this.x + r * 0.65, this.y - r * 0.1, r * 0.2, r * 0.4);
+                } else if (this.type === 'elite_battleship') {
+                    // Elite Battleship: Dominant heavy cruiser hull with side weapon pods
                     ctx.beginPath();
-                    ctx.moveTo(this.x, this.y + r); // bottom apex
-                    ctx.lineTo(this.x - r, this.y - r); // top left
-                    ctx.lineTo(this.x, this.y - r / 2); // center rear
-                    ctx.lineTo(this.x + r, this.y - r); // top right
+                    ctx.moveTo(this.x, this.y + r); // Main heavy center bow
+                    ctx.lineTo(this.x - r * 0.4, this.y + r * 0.4); // Left deck indent
+                    ctx.lineTo(this.x - r, this.y + r * 0.1); // Left flanking armor pod
+                    ctx.lineTo(this.x - r * 0.8, this.y - r * 0.9); // Left back wing
+                    ctx.lineTo(this.x, this.y - r * 0.5); // Rear bridge
+                    ctx.lineTo(this.x + r * 0.8, this.y - r * 0.9); // Right back wing
+                    ctx.lineTo(this.x + r, this.y + r * 0.1); // Right flanking armor pod
+                    ctx.lineTo(this.x + r * 0.4, this.y + r * 0.4); // Right deck indent
                     ctx.closePath();
                     ctx.fill();
                     ctx.stroke();
+
+                    // Glowing power shield visual
+                    if (this.shield > 0) {
+                        ctx.strokeStyle = `rgba(0, 230, 118, ${0.45 + Math.sin(Date.now() * 0.005) * 0.15})`;
+                        ctx.lineWidth = 3.5;
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, r * 1.35, 0, Math.PI * 2);
+                        ctx.stroke();
+                        
+                        // Shield energy core
+                        ctx.fillStyle = 'rgba(0, 230, 118, 0.12)';
+                        ctx.beginPath();
+                        ctx.arc(this.x, this.y, r * 1.35, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
                 }
                 ctx.restore();
             }
@@ -3341,6 +3619,10 @@
                     const enemy = enemies[eIdx];
                     if (!enemy.active) continue;
 
+                    if (enemy.type === 'stealth' && enemy.opacity < 0.45) {
+                        continue; // Phased out stealth ship is immune to bullet collision
+                    }
+
                     const dist = Math.hypot(bullet.x - enemy.x, bullet.y - enemy.y);
                     const collisionDist = (enemy.width / 2) + bullet.size;
 
@@ -3348,7 +3630,17 @@
                         bullet.active = false;
                         
                         const dmg = (shipStats && shipStats.damageMultiplier) ? shipStats.damageMultiplier : 1;
-                        enemy.hp -= dmg;
+                        if (enemy.type === 'elite_battleship' && enemy.shield > 0) {
+                            enemy.shield -= dmg;
+                            spawnExplosion(bullet.x, bullet.y, '#00e676', 6);
+                            if (enemy.shield < 0) {
+                                enemy.hp += enemy.shield;
+                                enemy.shield = 0;
+                            }
+                        } else {
+                            enemy.hp -= dmg;
+                        }
+
                         if (enemy.hp <= 0) {
                             enemy.active = false;
                             spawnExplosion(enemy.x, enemy.y, enemy.color, 16);
@@ -3360,9 +3652,21 @@
                                 for (let otherIdx = 0; otherIdx < enemies.length; otherIdx++) {
                                     const otherEnemy = enemies[otherIdx];
                                     if (otherEnemy.active && otherEnemy !== enemy) {
+                                        if (otherEnemy.type === 'stealth' && otherEnemy.opacity < 0.45) {
+                                            continue;
+                                        }
                                         const distToSplash = Math.hypot(enemy.x - otherEnemy.x, enemy.y - otherEnemy.y);
                                         if (distToSplash < 100) {
-                                            otherEnemy.hp -= 1; // splash damage
+                                            if (otherEnemy.type === 'elite_battleship' && otherEnemy.shield > 0) {
+                                                otherEnemy.shield -= 1;
+                                                spawnExplosion(otherEnemy.x, otherEnemy.y, '#00e676', 4);
+                                                if (otherEnemy.shield < 0) {
+                                                    otherEnemy.hp += otherEnemy.shield;
+                                                    otherEnemy.shield = 0;
+                                                }
+                                            } else {
+                                                otherEnemy.hp -= 1; // splash damage
+                                            }
                                             spawnExplosion(otherEnemy.x, otherEnemy.y, '#ff00ff', 4);
                                             if (otherEnemy.hp <= 0) {
                                                 otherEnemy.active = false;
