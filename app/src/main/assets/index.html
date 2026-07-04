@@ -324,8 +324,8 @@
                 <span id="level-display" class="hud-val">1</span>
             </div>
             <div class="hud-item">
-                <span class="hud-label">Score</span>
-                <span id="score-display" class="hud-val">00000</span>
+                <span class="hud-label">Kills</span>
+                <span id="score-display" class="hud-val">0</span>
             </div>
             <div class="hud-item" style="align-items: center;">
                 <span class="hud-label">Armor</span>
@@ -381,12 +381,16 @@
                 <p id="level-complete-subtitle" class="subtitle" style="color: #a0ffdd;">Sector Secured Successfully</p>
                 <div class="stats-box">
                     <div class="stat-row">
-                        <span class="stat-label">Sector Bonus Points</span>
-                        <span id="level-bonus-points" class="stat-value" style="color: #00ffaa;">+100</span>
+                        <span class="stat-label">Level Completed</span>
+                        <span id="level-complete-num" class="stat-value" style="color: #00ffaa;">1</span>
                     </div>
                     <div class="stat-row">
-                        <span class="stat-label">Sector Coins Found</span>
-                        <span id="level-bonus-coins" class="stat-value" style="color: #ffd700;">+10</span>
+                        <span class="stat-label">Total Kills</span>
+                        <span id="level-complete-kills" class="stat-value" style="color: #00f0ff;">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Coins Earned</span>
+                        <span id="level-bonus-coins" class="stat-value" style="color: #ffd700;">+0</span>
                     </div>
                     <div class="stat-row" style="border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
                         <span class="stat-label">Total Coins</span>
@@ -3692,7 +3696,8 @@
                             enemy.active = false;
                             spawnExplosion(enemy.x, enemy.y, enemy.color, 16);
                             score += enemy.scoreVal;
-                            scoreDisplay.textContent = String(score).padStart(5, '0');
+                            levelKills++;
+                            scoreDisplay.textContent = String(levelKills);
 
                             // Nova Destroyer splash damage
                             if (shipStats && shipStats.novaExplosion) {
@@ -3718,7 +3723,19 @@
                                             if (otherEnemy.hp <= 0) {
                                                 otherEnemy.active = false;
                                                 score += otherEnemy.scoreVal;
-                                                scoreDisplay.textContent = String(score).padStart(5, '0');
+                                                levelKills++;
+                                                scoreDisplay.textContent = String(levelKills);
+                                                
+                                                if (levelState === 'PLAYING' && levelKills >= targetKills) {
+                                                    const lvlBoss = LEVELS[currentLevel]?.boss;
+                                                    if (lvlBoss) {
+                                                        levelState = 'BOSS_INCOMING';
+                                                        bossIncomingTimer = 3000;
+                                                        sound.playGameOver();
+                                                    } else {
+                                                        levelSecured();
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -3727,7 +3744,6 @@
                             
                             // Progression Check (Normal playing state progression)
                             if (levelState === 'PLAYING') {
-                                levelKills++;
                                 if (levelKills >= targetKills) {
                                     const lvlBoss = LEVELS[currentLevel]?.boss;
                                     if (lvlBoss) {
@@ -3935,7 +3951,8 @@
             bossDestructionTimer = 1800; // 1.8s explosion sequence
             bossExplosionTimer = 0;
             score += 1000;
-            scoreDisplay.textContent = String(score).padStart(5, '0');
+            levelKills++;
+            scoreDisplay.textContent = String(levelKills);
             sound.playGameOver();
         }
 
@@ -3959,7 +3976,7 @@
             totalCoins += bonusCoins;
             runCoins += bonusCoins;
 
-            scoreDisplay.textContent = String(score).padStart(5, '0');
+            scoreDisplay.textContent = String(levelKills);
             updateCoinsHUD();
 
             if (window.AndroidGame && typeof window.AndroidGame.saveTotalCoins === 'function') {
@@ -3972,9 +3989,18 @@
 
             // Setup level complete HUD
             document.getElementById('level-complete-subtitle').textContent = `Sector ${currentLevel} Secured Successfully`;
-            document.getElementById('level-bonus-points').textContent = `+${bonusPoints}`;
-            document.getElementById('level-bonus-coins').textContent = `+${bonusCoins}`;
-            document.getElementById('level-total-coins').textContent = String(totalCoins).padStart(4, '0');
+            if (document.getElementById('level-complete-num')) {
+                document.getElementById('level-complete-num').textContent = currentLevel;
+            }
+            if (document.getElementById('level-complete-kills')) {
+                document.getElementById('level-complete-kills').textContent = levelKills;
+            }
+            if (document.getElementById('level-bonus-coins')) {
+                document.getElementById('level-bonus-coins').textContent = `+${bonusCoins}`;
+            }
+            if (document.getElementById('level-total-coins')) {
+                document.getElementById('level-total-coins').textContent = String(totalCoins).padStart(4, '0');
+            }
 
             levelCompleteScreen.classList.remove('hidden');
             hud.classList.add('hidden');
@@ -4060,7 +4086,7 @@
             isScoreSaved = false;
             
             // Update HUD text displays
-            scoreDisplay.textContent = String(score).padStart(5, '0');
+            scoreDisplay.textContent = String(levelKills);
             levelDisplay.textContent = currentLevel;
             updateLivesHUD();
             updateCoinsHUD();
