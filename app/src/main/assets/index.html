@@ -3912,10 +3912,25 @@
                             levelSecured();
                         }
                     } else if (levelState === 'PLAYING') {
-                        const currentRate = LEVELS[currentLevel]?.spawnRate || SPAWN_INTERVAL_BASE;
-                        if (timestamp - lastSpawnTime >= currentRate) {
-                            spawnEnemy();
-                            lastSpawnTime = timestamp;
+                        const isFinalStage = levelKills >= Math.floor(targetKills * 0.9);
+                        if (isFinalStage) {
+                            const activeEnemiesCount = enemies.filter(e => e.active).length;
+                            if (activeEnemiesCount === 0) {
+                                const lvlBoss = LEVELS[currentLevel]?.boss;
+                                if (lvlBoss) {
+                                    levelState = 'BOSS_INCOMING';
+                                    bossIncomingTimer = 3000; // 3 seconds of red pulsating warning
+                                    sound.playGameOver(); // warning sound
+                                } else {
+                                    levelSecured();
+                                }
+                            }
+                        } else {
+                            const currentRate = LEVELS[currentLevel]?.spawnRate || SPAWN_INTERVAL_BASE;
+                            if (timestamp - lastSpawnTime >= currentRate) {
+                                spawnEnemy();
+                                lastSpawnTime = timestamp;
+                            }
                         }
                     }
 
