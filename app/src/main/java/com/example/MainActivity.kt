@@ -121,16 +121,6 @@ class MainActivity : ComponentActivity() {
         highestLevelState = level
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
         prefs.edit().putInt("highest_unlocked_level", level).apply()
-        AuthManager.currentUser?.let { user ->
-            AuthManager.saveAccountProgress(
-                context = this,
-                userId = user.id,
-                coins = totalCoinsState,
-                level = level,
-                equippedShip = equippedShipIdState,
-                ownedShips = ownedShipsState
-            )
-        }
     }
 
     fun getTotalCoins(): Int = totalCoinsState
@@ -138,16 +128,6 @@ class MainActivity : ComponentActivity() {
         totalCoinsState = coins
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
         prefs.edit().putInt("total_coins", coins).apply()
-        AuthManager.currentUser?.let { user ->
-            AuthManager.saveAccountProgress(
-                context = this,
-                userId = user.id,
-                coins = coins,
-                level = highestLevelState,
-                equippedShip = equippedShipIdState,
-                ownedShips = ownedShipsState
-            )
-        }
     }
 
     // Spaceship Garage & Selection state variables
@@ -162,16 +142,6 @@ class MainActivity : ComponentActivity() {
         webView?.post {
             webView?.evaluateJavascript("window.syncEquippedShip()", null)
         }
-        AuthManager.currentUser?.let { user ->
-            AuthManager.saveAccountProgress(
-                context = this,
-                userId = user.id,
-                coins = totalCoinsState,
-                level = highestLevelState,
-                equippedShip = shipId,
-                ownedShips = ownedShipsState
-            )
-        }
     }
 
     fun getOwnedShips(): Set<String> = ownedShipsState
@@ -183,16 +153,6 @@ class MainActivity : ComponentActivity() {
             .putString("owned_ships_csv", csv)
             .putStringSet("owned_ships", ships)
             .apply()
-        AuthManager.currentUser?.let { user ->
-            AuthManager.saveAccountProgress(
-                context = this,
-                userId = user.id,
-                coins = totalCoinsState,
-                level = highestLevelState,
-                equippedShip = equippedShipIdState,
-                ownedShips = ships
-            )
-        }
     }
 
     // Sound, Music, Vibration, Pause states
@@ -273,118 +233,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    fun handleLoginSuccess(profile: UserProfile) {
-        AuthManager.syncAccountProgress(
-            context = this,
-            userId = profile.id,
-            currentCoins = totalCoinsState,
-            currentLevel = highestLevelState,
-            currentEquippedShip = equippedShipIdState,
-            currentOwnedShips = ownedShipsState,
-            onNewUserReward = {
-                totalCoinsState += 200
-                showBonusPopup = true
-            },
-            onProgressRestored = { coins, level, equippedShip, ownedShips ->
-                totalCoinsState = coins
-                highestLevelState = level
-                equippedShipIdState = equippedShip
-                ownedShipsState = ownedShips
-                selectedLevel = level
-                
-                webView?.post {
-                    webView?.evaluateJavascript("window.syncEquippedShip()", null)
-                }
-            }
-        )
-        
-        AuthManager.saveSession(this, profile)
-        Toast.makeText(this, "Logged in as ${profile.name}!", Toast.LENGTH_LONG).show()
-    }
-
-    fun handleLogout() {
-        val activeUser = AuthManager.currentUser
-        if (activeUser != null) {
-            AuthManager.saveAccountProgress(
-                context = this,
-                userId = activeUser.id,
-                coins = totalCoinsState,
-                level = highestLevelState,
-                equippedShip = equippedShipIdState,
-                ownedShips = ownedShipsState
-            )
-        }
-        
-        try {
-            com.google.firebase.auth.FirebaseAuth.getInstance().signOut()
-        } catch (e: Exception) {
-            Log.e("Auth", "Firebase signOut error", e)
-        }
-        try {
-            AuthManager.googleSignInClient.signOut()
-        } catch (e: Exception) {
-            Log.e("Auth", "Google signOut error", e)
-        }
-        try {
-            com.facebook.login.LoginManager.getInstance().logOut()
-        } catch (e: Exception) {
-            Log.e("Auth", "Facebook logOut error", e)
-        }
-
-        AuthManager.clearSession(this)
-        
-        // Restore local Guest settings
-        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
-        totalCoinsState = prefs.getInt("total_coins", 0)
-        highestLevelState = prefs.getInt("highest_unlocked_level", 1)
-        equippedShipIdState = prefs.getString("equipped_ship_id", "falcon") ?: "falcon"
-        val ownedStr = prefs.getString("owned_ships_csv", null)
-        ownedShipsState = if (ownedStr != null) {
-            ownedStr.split(",").filter { it.isNotEmpty() }.toSet()
-        } else {
-            setOf("falcon")
-        }
-        selectedLevel = highestLevelState
-        
-        Toast.makeText(this, "Logged out", Toast.LENGTH_SHORT).show()
-    }
-
-    fun triggerGoogleSignIn() {
-        try {
-            val signInIntent = AuthManager.googleSignInClient.signInIntent
-            startActivityForResult(signInIntent, RC_SIGN_IN)
-        } catch (e: Exception) {
-            Log.e("Auth", "Failed to start Google sign in intent", e)
-            Toast.makeText(this, "Google Sign-In initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    fun triggerFacebookLogin() {
-        try {
-            com.facebook.login.LoginManager.getInstance().logInWithReadPermissions(
-                this,
-                listOf("public_profile")
-            )
-        } catch (e: Exception) {
-            Log.e("Auth", "Failed to start Facebook login", e)
-            Toast.makeText(this, "Facebook Login initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        try {
-            AuthManager.callbackManager.onActivityResult(requestCode, resultCode, data)
-        } catch (e: Exception) {
-            Log.e("Auth", "CallbackManager error", e)
-        }
-
-        if (requestCode == RC_SIGN_IN) {
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
-            handleGoogleSignInResult(task)
-        }
-    }
-
     override fun onResume() {
         super.onResume()
         if (::backgroundMusicManager.isInitialized) {
@@ -406,43 +254,6 @@ class MainActivity : ComponentActivity() {
         }
         if (::billingManager.isInitialized) {
             billingManager.destroy()
-        }
-    }
-
-    private fun handleGoogleSignInResult(completedTask: com.google.android.gms.tasks.Task<com.google.android.gms.auth.api.signin.GoogleSignInAccount>) {
-        try {
-            val account = completedTask.getResult(ApiException::class.java)
-            val idToken = account?.idToken
-            if (idToken != null) {
-                val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
-                com.google.firebase.auth.FirebaseAuth.getInstance().signInWithCredential(credential)
-                    .addOnCompleteListener { authTask ->
-                        if (authTask.isSuccessful) {
-                            val firebaseUser = authTask.result?.user
-                            if (firebaseUser != null) {
-                                val userProfile = UserProfile(
-                                    id = firebaseUser.uid,
-                                    name = firebaseUser.displayName ?: account.displayName ?: "Google User",
-                                    email = firebaseUser.email ?: account.email ?: "",
-                                    photoUrl = firebaseUser.photoUrl?.toString() ?: account.photoUrl?.toString() ?: "",
-                                    provider = "Google"
-                                )
-                                handleLoginSuccess(userProfile)
-                            } else {
-                                Toast.makeText(this, "Google sign-in succeeded, but User is null.", Toast.LENGTH_LONG).show()
-                            }
-                        } else {
-                            Log.e("Auth", "Firebase Google Sign-In failed", authTask.exception)
-                            Toast.makeText(this, "Firebase Google login failed: ${authTask.exception?.message}", Toast.LENGTH_LONG).show()
-                        }
-                    }
-            } else {
-                Toast.makeText(this, "Google Sign-In failed: No ID Token retrieved.", Toast.LENGTH_LONG).show()
-            }
-        } catch (e: Exception) {
-            val statusCode = (e as? ApiException)?.statusCode ?: -1
-            Log.e("Auth", "Google sign_in failed: code=" + statusCode, e)
-            Toast.makeText(this, "Google Sign-In failed: code=$statusCode (${e.message})", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -482,6 +293,7 @@ class MainActivity : ComponentActivity() {
         
         backgroundMusicManager = BackgroundMusicManager(this)
         backgroundMusicManager.setEnabled(musicEnabledState)
+        // Load local player progress directly
         highestLevelState = prefs.getInt("highest_unlocked_level", 1)
         totalCoinsState = prefs.getInt("total_coins", 0)
         selectedLevel = highestLevelState
@@ -492,92 +304,6 @@ class MainActivity : ComponentActivity() {
             ownedShipsStr.split(",").filter { it.isNotEmpty() }.toSet()
         } else {
             prefs.getStringSet("owned_ships", setOf("falcon")) ?: setOf("falcon")
-        }
-
-        // Initialize AuthManager & load active user progress if signed in
-        AuthManager.init(this)
-        try {
-            com.facebook.login.LoginManager.getInstance().registerCallback(
-                AuthManager.callbackManager,
-                object : com.facebook.FacebookCallback<com.facebook.login.LoginResult> {
-                    override fun onSuccess(result: com.facebook.login.LoginResult) {
-                        val token = result.accessToken?.token
-                        if (token != null) {
-                            val request = com.facebook.GraphRequest.newMeRequest(result.accessToken) { obj, response ->
-                                try {
-                                    val id = obj?.optString("id") ?: "fb_user_${System.currentTimeMillis()}"
-                                    val name = obj?.optString("name") ?: "Facebook User"
-                                    val email = obj?.optString("email") ?: ""
-                                    val photoUrl = "https://graph.facebook.com/$id/picture?type=large"
-                                    
-                                    val credential = com.google.firebase.auth.FacebookAuthProvider.getCredential(token)
-                                    com.google.firebase.auth.FirebaseAuth.getInstance().signInWithCredential(credential)
-                                        .addOnCompleteListener { authTask ->
-                                            if (authTask.isSuccessful) {
-                                                val firebaseUser = authTask.result?.user
-                                                if (firebaseUser != null) {
-                                                    val userProfile = UserProfile(
-                                                        id = firebaseUser.uid,
-                                                        name = firebaseUser.displayName ?: name,
-                                                        email = firebaseUser.email ?: email,
-                                                        photoUrl = firebaseUser.photoUrl?.toString() ?: photoUrl,
-                                                        provider = "Facebook"
-                                                    )
-                                                    handleLoginSuccess(userProfile)
-                                                } else {
-                                                    Toast.makeText(this@MainActivity, "Facebook sign-in succeeded, but User is null.", Toast.LENGTH_LONG).show()
-                                                }
-                                            } else {
-                                                Log.e("Auth", "Firebase Facebook Sign-In failed", authTask.exception)
-                                                Toast.makeText(this@MainActivity, "Firebase Facebook login failed: ${authTask.exception?.message}", Toast.LENGTH_LONG).show()
-                                            }
-                                        }
-                                } catch (e: Exception) {
-                                    Log.e("Auth", "Facebook GraphRequest parsing error", e)
-                                    Toast.makeText(this@MainActivity, "Failed to retrieve Facebook profile details.", Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                            val parameters = android.os.Bundle()
-                            parameters.putString("fields", "id,name,email")
-                            request.parameters = parameters
-                            request.executeAsync()
-                        } else {
-                            Toast.makeText(this@MainActivity, "Facebook login failed: Token is null", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-
-                    override fun onCancel() {
-                        Toast.makeText(this@MainActivity, "Facebook login cancelled", Toast.LENGTH_SHORT).show()
-                    }
-
-                    override fun onError(error: com.facebook.FacebookException) {
-                        Log.e("Auth", "Facebook login error", error)
-                        Toast.makeText(this@MainActivity, "Facebook Login failed: ${error.message}", Toast.LENGTH_LONG).show()
-                    }
-                }
-            )
-        } catch (e: Exception) {
-            Log.e("Auth", "Failed to register Facebook login callback", e)
-        }
-
-        val activeUser = AuthManager.currentUser
-        if (activeUser != null) {
-            AuthManager.syncAccountProgress(
-                context = this,
-                userId = activeUser.id,
-                currentCoins = totalCoinsState,
-                currentLevel = highestLevelState,
-                currentEquippedShip = equippedShipIdState,
-                currentOwnedShips = ownedShipsState
-            ) { coins, level, equippedShip, ownedShips ->
-                totalCoinsState = coins
-                highestLevelState = level
-                equippedShipIdState = equippedShip
-                ownedShipsState = ownedShips
-                selectedLevel = level
-            }
-        } else {
-            showAuthWelcomeScreen = true
         }
 
         // Hide Android System Bars (Status and Navigation) to provide true immersive arcade view
@@ -694,10 +420,6 @@ class MainActivity : ComponentActivity() {
                                     onSettingsClick = {
                                         playClickSound()
                                         showSettingsDialog = true
-                                    },
-                                    onProfileClick = {
-                                        playClickSound()
-                                        showProfileDialog = true
                                     },
                                     soundEnabled = soundEffectsEnabledState && musicEnabledState,
                                     onSoundToggled = { enabled ->
@@ -858,12 +580,7 @@ class MainActivity : ComponentActivity() {
                                 vibrationEnabled = vibrationEnabledState,
                                 onVibrationChanged = { setVibrationEnabled(it) },
                                 onClose = { showSettingsDialog = false },
-                                playClick = { playClickSound() },
-                                onProfileClick = {
-                                    playClickSound()
-                                    showSettingsDialog = false
-                                    showProfileDialog = true
-                                }
+                                playClick = { playClickSound() }
                             )
                         }
 
@@ -882,55 +599,6 @@ class MainActivity : ComponentActivity() {
                                 onSuccessOverlayDismiss = {
                                     showPurchaseSuccessOverlay = false
                                     showCoinShopDialog = false
-                                }
-                            )
-                        }
-
-                        // Auth Welcome Screen for first launches
-                        if (showAuthWelcomeScreen) {
-                            AuthWelcomeOverlay(
-                                onGoogleLoginClick = {
-                                    playClickSound()
-                                    triggerGoogleSignIn()
-                                    showAuthWelcomeScreen = false
-                                },
-                                onFacebookLoginClick = {
-                                    playClickSound()
-                                    triggerFacebookLogin()
-                                    showAuthWelcomeScreen = false
-                                },
-                                onPlayAsGuest = {
-                                    playClickSound()
-                                    showAuthWelcomeScreen = false
-                                }
-                            )
-                        }
-
-                        // Profile details view (Logout and Sync stats)
-                        if (showProfileDialog) {
-                            ProfileDialog(
-                                onLogout = {
-                                    handleLogout()
-                                    showProfileDialog = false
-                                },
-                                onClose = {
-                                    playClickSound()
-                                    showProfileDialog = false
-                                },
-                                onTriggerLogin = {
-                                    playClickSound()
-                                    showProfileDialog = false
-                                    showAuthWelcomeScreen = true
-                                }
-                            )
-                        }
-
-                        // 200 Coin bonus celebration popup
-                        if (showBonusPopup) {
-                            BonusCoinsPopup(
-                                onCollect = {
-                                    playClickSound()
-                                    showBonusPopup = false
                                 }
                             )
                         }
@@ -1556,7 +1224,6 @@ fun MainMenuOverlay(
     onLevelSelected: (Int) -> Unit,
     onLaunchMission: () -> Unit,
     onSettingsClick: () -> Unit = {},
-    onProfileClick: () -> Unit = {},
     soundEnabled: Boolean,
     onSoundToggled: (Boolean) -> Unit,
     equippedShipId: String,
@@ -1607,58 +1274,26 @@ fun MainMenuOverlay(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Interactive Profile Avatar Button
-                val activeUser = AuthManager.currentUser
+                // Left: Local Pilot Status Tag
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .clickable { onProfileClick() }
                         .background(Color(0xFF0C1033).copy(alpha = 0.85f), shape = RoundedCornerShape(12.dp))
                         .border(
-                            BorderStroke(
-                                1.2.dp,
-                                if (activeUser != null) Color(0xFF00F0FF) else Color(0xFFFF0080)
-                            ),
+                            BorderStroke(1.2.dp, Color(0xFF00F0FF)),
                             shape = RoundedCornerShape(12.dp)
                         )
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
-                    if (activeUser != null) {
-                        AsyncImage(
-                            model = activeUser.photoUrl,
-                            contentDescription = "Profile",
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clip(CircleShape)
-                                .border(1.dp, Color(0xFF00F0FF), CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = activeUser.name.split(" ").firstOrNull() ?: "Pilot",
-                            color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .size(24.dp)
-                                .background(Color(0xFF1E293B), shape = CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("👤", fontSize = 11.sp)
-                        }
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "GUEST",
-                            color = Color(0xFFFF0080),
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontFamily = FontFamily.Monospace,
-                            letterSpacing = 1.sp
-                        )
-                    }
+                    Text("👤 ", fontSize = 11.sp)
+                    Text(
+                        text = "PILOT: LOCAL",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
+                    )
                 }
 
                 // Right: Coins Indicator
@@ -2529,8 +2164,7 @@ fun SettingsDialog(
     vibrationEnabled: Boolean,
     onVibrationChanged: (Boolean) -> Unit,
     onClose: () -> Unit,
-    playClick: () -> Unit,
-    onProfileClick: () -> Unit
+    playClick: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onClose,
@@ -2558,82 +2192,6 @@ fun SettingsDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Profile Section at top of settings
-                val activeUser = AuthManager.currentUser
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0x3F00F0FF).copy(alpha = 0.08f), shape = RoundedCornerShape(10.dp))
-                        .border(BorderStroke(1.dp, Color(0xFF00F0FF).copy(alpha = 0.3f)), shape = RoundedCornerShape(10.dp))
-                        .clickable { onProfileClick() }
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (activeUser != null) {
-                            AsyncImage(
-                                model = activeUser.photoUrl,
-                                contentDescription = "Profile",
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(CircleShape)
-                                    .border(1.2.dp, Color(0xFF00F0FF), CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = activeUser.name,
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.SansSerif
-                                )
-                                Text(
-                                    text = "Synced via ${activeUser.provider}",
-                                    color = Color(0xFF00F0FF),
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .background(Color(0xFF1E293B), shape = CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("👤", fontSize = 16.sp)
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "GUEST PILOT",
-                                    color = Color.White,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.SansSerif
-                                )
-                                Text(
-                                    text = "Progress not synced",
-                                    color = Color(0xFFFF0080),
-                                    fontSize = 10.sp,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                        }
-                    }
-
-                    // Action Button Text
-                    Text(
-                        text = if (activeUser != null) "VIEW PROFILE ➔" else "SYNC PROGRESS ➔",
-                        color = if (activeUser != null) Color(0xFF00F0FF) else Color(0xFFFF0080),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-
                 // Sound Effects Toggle
                 Row(
                     modifier = Modifier
@@ -3737,400 +3295,4 @@ fun StatProgressBar(label: String, value: Float, color: Color) {
     }
 }
 
-@Composable
-fun AuthWelcomeOverlay(
-    onGoogleLoginClick: () -> Unit,
-    onFacebookLoginClick: () -> Unit,
-    onPlayAsGuest: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xE603030F)),
-        contentAlignment = Alignment.Center
-    ) {
-        StarfieldBackground()
-        ParticleDustBackground()
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth(0.9f)
-                .background(Color(0xFA0B0F2F), shape = RoundedCornerShape(16.dp))
-                .border(
-                    BorderStroke(1.5.dp, Brush.horizontalGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080)))),
-                    shape = RoundedCornerShape(16.dp)
-                )
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            // Neon Glow Header
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "PILOT SYNC TERMINAL",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White,
-                    letterSpacing = 2.sp,
-                    fontFamily = FontFamily.SansSerif
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "Link your pilot account to secure stats & progress",
-                    fontSize = 11.sp,
-                    color = Color.Gray,
-                    textAlign = TextAlign.Center,
-                    fontFamily = FontFamily.SansSerif
-                )
-            }
-
-            // Reward Badge
-            Box(
-                modifier = Modifier
-                    .background(Color(0xFFFFD700).copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp))
-                    .border(BorderStroke(1.dp, Color(0xFFFFD700)), shape = RoundedCornerShape(8.dp))
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "🎁 FIRST SYNC BONUS: 🪙 200 COINS!",
-                    color = Color(0xFFFFD700),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-
-            // Google Sign In Button
-            Button(
-                onClick = onGoogleLoginClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp)
-                    .testTag("google_login_button")
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text("G ", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color(0xFFEA4335))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "SIGN IN WITH GOOGLE",
-                        color = Color(0xFF1E293B),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.SansSerif
-                    )
-                }
-            }
-
-            // Facebook Sign In Button
-            Button(
-                onClick = onFacebookLoginClick,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1877F2)),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp)
-                    .testTag("facebook_login_button")
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Text("f ", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "SIGN IN WITH FACEBOOK",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.SansSerif
-                    )
-                }
-            }
-
-            // Play as Guest action
-            TextButton(
-                onClick = onPlayAsGuest,
-                modifier = Modifier.testTag("guest_login_button")
-            ) {
-                Text(
-                    text = "CONTINUE AS GUEST PILOT ➔",
-                    color = Color(0xFFFF0080),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 1.sp
-                )
-            }
-        }
-    }
-}
-
-@Composable
-fun ProfileDialog(
-    onLogout: () -> Unit,
-    onClose: () -> Unit,
-    onTriggerLogin: () -> Unit
-) {
-    val activeUser = AuthManager.currentUser
-
-    AlertDialog(
-        onDismissRequest = onClose,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier
-            .fillMaxWidth(0.85f)
-            .border(
-                BorderStroke(2.dp, Brush.horizontalGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080)))),
-                shape = RoundedCornerShape(16.dp)
-            ),
-        containerColor = Color(0xFB0A0F2D),
-        title = {
-            Text(
-                text = "PILOT PROFILE PANEL",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                letterSpacing = 1.sp,
-                modifier = Modifier.fillMaxWidth()
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (activeUser != null) {
-                    // Profile Info
-                    AsyncImage(
-                        model = activeUser.photoUrl,
-                        contentDescription = "Pilot Avatar",
-                        modifier = Modifier
-                            .size(72.dp)
-                            .clip(CircleShape)
-                            .border(2.dp, Color(0xFF00F0FF), CircleShape)
-                    )
-
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = activeUser.name,
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.SansSerif
-                        )
-                        Text(
-                            text = activeUser.email,
-                            color = Color.Gray,
-                            fontSize = 12.sp,
-                            fontFamily = FontFamily.SansSerif
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFF00F0FF).copy(alpha = 0.15f), shape = RoundedCornerShape(4.dp))
-                                .border(BorderStroke(1.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(4.dp))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(
-                                text = "AUTH STATUS: ${activeUser.provider.uppercase()}",
-                                color = Color(0xFF00F0FF),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                    }
-
-                    // Progress Status List
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(Color(0x3F000000), shape = RoundedCornerShape(10.dp))
-                            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)), shape = RoundedCornerShape(10.dp))
-                            .padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "SYNCHRONIZED PROGRESS",
-                            color = Color.Gray,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "UNLOCKED SECTOR:", color = Color.White, fontSize = 11.sp)
-                            Text(text = "SECTOR 50", color = Color(0xFF00F0FF), fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(text = "GALAXY STREAK:", color = Color.White, fontSize = 11.sp)
-                            Text(text = "STREAK X3", color = Color(0xFFFF0080), fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                        }
-                    }
-
-                    // Logout Button
-                    Button(
-                        onClick = onLogout,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4D4D)),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp)
-                            .testTag("logout_button")
-                    ) {
-                        Text(
-                            text = "LOGOUT PILOT ACCOUNT",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.SansSerif
-                        )
-                    }
-                } else {
-                    // Guest status prompt
-                    Box(
-                        modifier = Modifier
-                            .size(72.dp)
-                            .background(Color(0xFF1E293B), shape = CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("👤", fontSize = 32.sp)
-                    }
-
-                    Text(
-                        text = "You are currently playing as a Guest Pilot. Your progress is local to this device.",
-                        color = Color.Gray,
-                        fontSize = 12.sp,
-                        textAlign = TextAlign.Center,
-                        fontFamily = FontFamily.SansSerif
-                    )
-
-                    Button(
-                        onClick = onTriggerLogin,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(44.dp)
-                            .border(BorderStroke(1.2.dp, Color(0xFFFF0080)), shape = RoundedCornerShape(8.dp))
-                            .background(Brush.horizontalGradient(listOf(Color(0xFF4A0033), Color(0xFF1E002F))))
-                    ) {
-                        Text(
-                            text = "CONNECT PILOT ACCOUNT",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.SansSerif
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onClose,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Text(text = "DISMISS", color = Color.White, fontSize = 12.sp)
-            }
-        }
-    )
-}
-
-@Composable
-fun BonusCoinsPopup(onCollect: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onCollect,
-        properties = DialogProperties(usePlatformDefaultWidth = false),
-        modifier = Modifier
-            .fillMaxWidth(0.85f)
-            .border(
-                BorderStroke(2.dp, Color(0xFFFFD700)),
-                shape = RoundedCornerShape(16.dp)
-            ),
-        containerColor = Color(0xFB0F140A),
-        title = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = "🪙 REWARD RECEIVED! 🪙",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color(0xFFFFD700),
-                    textAlign = TextAlign.Center,
-                    fontFamily = FontFamily.SansSerif
-                )
-            }
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Text(
-                    text = "PILOT SYNC BONUS",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    fontFamily = FontFamily.Monospace
-                )
-                
-                Text(
-                    text = "+200 COINS",
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFFFFD700),
-                    fontFamily = FontFamily.Monospace
-                )
-
-                Text(
-                    text = "Your first-time authentication bonus has been credited to your account! Spend these coins in the garage to purchase advanced spaceships.",
-                    color = Color.Gray,
-                    fontSize = 12.sp,
-                    textAlign = TextAlign.Center,
-                    fontFamily = FontFamily.SansSerif
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = onCollect,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
-                    .testTag("collect_bonus_button")
-            ) {
-                Text(
-                    text = "COLLECT COINS",
-                    color = Color.Black,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontFamily = FontFamily.SansSerif
-                )
-            }
-        }
-    )
-}

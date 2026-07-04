@@ -207,8 +207,8 @@ fun LeaderboardScreen(
                 }
             } else {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0x22FF0080)),
-                    border = BorderStroke(1.dp, Color(0x44FF0080)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0x2200F0FF)),
+                    border = BorderStroke(1.dp, Color(0x4400F0FF)),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -223,12 +223,12 @@ fun LeaderboardScreen(
                         Box(
                             modifier = Modifier
                                 .size(8.dp)
-                                .background(Color.Red, shape = RoundedCornerShape(4.dp))
+                                .background(Color(0xFF00F0FF), shape = RoundedCornerShape(4.dp))
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Offline Mode - Sign in to rank online",
-                            color = Color(0xFFFF80AB),
+                            text = "Local Arcade Mode Active",
+                            color = Color(0xFF8FA0DD),
                             fontSize = 12.sp,
                             fontFamily = FontFamily.Monospace
                         )
