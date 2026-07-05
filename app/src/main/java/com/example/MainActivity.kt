@@ -100,11 +100,13 @@ class MainActivity : ComponentActivity() {
     private var leaderboardList by mutableStateOf(listOf<LeaderboardEntry>())
     private var isScoreSavedForCurrentGame = false
 
-    // Level, Coins, Selected Stage states
+    // Level, Coins, Selected Stage, Statistics states
     private var highestLevelState by mutableStateOf(1)
     private var totalCoinsState by mutableStateOf(0)
     private var selectedLevel by mutableStateOf(1)
     private var coinsEarnedState by mutableStateOf(0)
+    private var gamesPlayedState by mutableStateOf(0)
+    private var totalKillsState by mutableStateOf(0)
 
     fun onLevelCompleted(coinsEarned: Int, totalCoins: Int) {
         coinsEarnedState = coinsEarned
@@ -121,6 +123,7 @@ class MainActivity : ComponentActivity() {
         highestLevelState = level
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
         prefs.edit().putInt("highest_unlocked_level", level).apply()
+        AuthManager.syncProfileToFirestore(this)
     }
 
     fun getTotalCoins(): Int = totalCoinsState
@@ -128,6 +131,7 @@ class MainActivity : ComponentActivity() {
         totalCoinsState = coins
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
         prefs.edit().putInt("total_coins", coins).apply()
+        AuthManager.syncProfileToFirestore(this)
     }
 
     // Spaceship Garage & Selection state variables
@@ -233,6 +237,55 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val profileImagePickerLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            val savedPath = AuthManager.cropAndSaveProfilePicture(this, uri)
+            if (savedPath != null) {
+                AuthManager.init(this)
+                AuthManager.syncProfileToFirestore(this)
+                Toast.makeText(this, "Profile picture updated!", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Failed to update profile picture.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun registerPilot(displayName: String) {
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        val generatedUid = (100000 + (Math.random() * 900000).toLong()).toString()
+        
+        prefs.edit()
+            .putString("player_uid", generatedUid)
+            .putString("player_name", displayName)
+            .putInt("total_coins", 200)
+            .putInt("highest_unlocked_level", 1)
+            .putInt("total_kills_stat", 0)
+            .putInt("games_played_stat", 0)
+            .apply()
+
+        highestLevelState = 1
+        totalCoinsState = 200
+        gamesPlayedState = 0
+        totalKillsState = 0
+
+        AuthManager.init(this)
+        AuthManager.syncProfileToFirestore(this)
+
+        showBonusPopup = true
+        showAuthWelcomeScreen = false
+    }
+
+    fun updatePilotName(newName: String) {
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("player_name", newName).apply()
+        
+        AuthManager.init(this)
+        AuthManager.syncProfileToFirestore(this)
+        Toast.makeText(this, "Pilot name updated!", Toast.LENGTH_SHORT).show()
+    }
+
     override fun onResume() {
         super.onResume()
         if (::backgroundMusicManager.isInitialized) {
@@ -264,17 +317,10 @@ class MainActivity : ComponentActivity() {
     }
 
     fun submitScoreToOnlineLeaderboard(score: Int, kills: Int) {
-        val user = AuthManager.currentUser
-        if (user != null) {
-            val coins = getTotalCoins()
-            leaderboardManager.updateOnlineLeaderboard(
-                userId = user.id,
-                displayName = user.name,
-                newScore = score,
-                killsEarned = kills,
-                currentCoins = coins
-            )
-        }
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        totalKillsState += kills
+        prefs.edit().putInt("total_kills_stat", totalKillsState).apply()
+        AuthManager.syncProfileToFirestore(this)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -304,6 +350,20 @@ class MainActivity : ComponentActivity() {
             ownedShipsStr.split(",").filter { it.isNotEmpty() }.toSet()
         } else {
             prefs.getStringSet("owned_ships", setOf("falcon")) ?: setOf("falcon")
+        }
+
+        gamesPlayedState = prefs.getInt("games_played_stat", 0)
+        totalKillsState = prefs.getInt("total_kills_stat", 0)
+
+        // Check if custom player profile is created
+        val uid = prefs.getString("player_uid", null)
+        val name = prefs.getString("player_name", null)
+        if (uid == null || name == null) {
+            showAuthWelcomeScreen = true
+        } else {
+            showAuthWelcomeScreen = false
+            AuthManager.init(this)
+            AuthManager.syncProfileToFirestore(this)
         }
 
         // Hide Android System Bars (Status and Navigation) to provide true immersive arcade view
@@ -454,6 +514,10 @@ class MainActivity : ComponentActivity() {
                                     onLeaderboardClick = {
                                         playClickSound()
                                         currentScreen = GameScreen.LEADERBOARD
+                                    },
+                                    onProfileClick = {
+                                        playClickSound()
+                                        showProfileDialog = true
                                     }
                                 )
                             }
@@ -602,6 +666,48 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+
+                        // Auth Welcome Screen for first launches
+                        if (showAuthWelcomeScreen) {
+                            AuthWelcomeOverlay(
+                                onRegister = { displayName ->
+                                    playClickSound()
+                                    registerPilot(displayName)
+                                }
+                            )
+                        }
+
+                        // Profile details view (Logout and Sync stats)
+                        if (showProfileDialog) {
+                            ProfileDialog(
+                                totalKills = totalKillsState,
+                                gamesPlayed = gamesPlayedState,
+                                highestLevel = highestLevelState,
+                                totalCoins = totalCoinsState,
+                                onUpdateName = { newName ->
+                                    playClickSound()
+                                    updatePilotName(newName)
+                                },
+                                onChangeProfilePicture = {
+                                    playClickSound()
+                                    profileImagePickerLauncher.launch("image/*")
+                                },
+                                onClose = {
+                                    playClickSound()
+                                    showProfileDialog = false
+                                }
+                            )
+                        }
+
+                        // 200 Coin bonus celebration popup
+                        if (showBonusPopup) {
+                            BonusCoinsPopup(
+                                onCollect = {
+                                    playClickSound()
+                                    showBonusPopup = false
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -674,6 +780,10 @@ class MainActivity : ComponentActivity() {
                         onGameStarted = {
                             isScoreSavedForCurrentGame = false
                             currentScreen = GameScreen.PLAYING
+                            gamesPlayedState += 1
+                            val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+                            prefs.edit().putInt("games_played_stat", gamesPlayedState).apply()
+                            AuthManager.syncProfileToFirestore(this@MainActivity)
                         },
                         getHighScore = {
                             leaderboardManager.getHighScore()
@@ -1231,7 +1341,8 @@ fun MainMenuOverlay(
     onEquipShip: (String) -> Unit,
     onBuyShip: (String, Int) -> Unit,
     onCoinShopClick: () -> Unit = {},
-    onLeaderboardClick: () -> Unit = {}
+    onLeaderboardClick: () -> Unit = {},
+    onProfileClick: () -> Unit = {}
 ) {
     var showLeaderboardPanel by remember { mutableStateOf(false) }
 
@@ -1274,26 +1385,50 @@ fun MainMenuOverlay(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Local Pilot Status Tag
+                // Left: Interactive Profile Avatar Button
+                val activeUser = AuthManager.currentUser
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
+                        .clickable { onProfileClick() }
                         .background(Color(0xFF0C1033).copy(alpha = 0.85f), shape = RoundedCornerShape(12.dp))
                         .border(
-                            BorderStroke(1.2.dp, Color(0xFF00F0FF)),
+                            BorderStroke(
+                                1.2.dp,
+                                if (activeUser != null) Color(0xFF00F0FF) else Color(0xFFFF0080)
+                            ),
                             shape = RoundedCornerShape(12.dp)
                         )
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
-                    Text("👤 ", fontSize = 11.sp)
-                    Text(
-                        text = "PILOT: LOCAL",
-                        color = Color.White,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 1.sp
-                    )
+                    if (activeUser != null) {
+                        AsyncImage(
+                            model = activeUser.photoUrl,
+                            contentDescription = "Profile",
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clip(CircleShape)
+                                .border(1.dp, Color(0xFF00F0FF), CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = activeUser.name.split(" ").firstOrNull() ?: "Pilot",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    } else {
+                        Text("👤 ", fontSize = 11.sp)
+                        Text(
+                            text = "PILOT: LOCAL",
+                            color = Color(0xFFFF0080),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 1.sp
+                        )
+                    }
                 }
 
                 // Right: Coins Indicator
@@ -3294,5 +3429,500 @@ fun StatProgressBar(label: String, value: Float, color: Color) {
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AuthWelcomeOverlay(
+    onRegister: (String) -> Unit
+) {
+    var displayNameInput by remember { mutableStateOf("") }
+    var hasAttemptedSubmit by remember { mutableStateOf(false) }
+    val isNameValid = displayNameInput.trim().length in 3..20
+    val showError = hasAttemptedSubmit && !isNameValid
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xE603030F)),
+        contentAlignment = Alignment.Center
+    ) {
+        StarfieldBackground()
+        ParticleDustBackground()
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth(0.9f)
+                .background(Color(0xFA0B0F2F), shape = RoundedCornerShape(16.dp))
+                .border(
+                    BorderStroke(1.5.dp, Brush.horizontalGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080)))),
+                    shape = RoundedCornerShape(16.dp)
+                )
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "INITIAL PILOT SETUP",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    letterSpacing = 2.sp,
+                    fontFamily = FontFamily.SansSerif
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Welcome to Cold Flight! Setup your neural signature record.",
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    fontFamily = FontFamily.SansSerif
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFFFFD700).copy(alpha = 0.1f), shape = RoundedCornerShape(8.dp))
+                    .border(BorderStroke(1.dp, Color(0xFFFFD700)), shape = RoundedCornerShape(8.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "🎁 REGISTRATION BONUS: 🪙 200 COINS!",
+                    color = Color(0xFFFFD700),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "PILOT DISPLAY NAME",
+                    color = Color(0xFF00F0FF),
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp
+                )
+
+                OutlinedTextField(
+                    value = displayNameInput,
+                    onValueChange = { displayNameInput = it },
+                    placeholder = { Text("Enter pilot name...", color = Color.Gray) },
+                    singleLine = true,
+                    isError = showError,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFF00F0FF),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        errorBorderColor = Color(0xFFFF0080),
+                        focusedContainerColor = Color(0xFF0D1236),
+                        unfocusedContainerColor = Color(0xFF0D1236)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("pilot_name_input"),
+                    supportingText = {
+                        Text(
+                            text = if (showError) "Pilot name must be between 3 and 20 characters." else "Length: 3-20 characters",
+                            color = if (showError) Color(0xFFFF0080) else Color.Gray,
+                            fontSize = 10.sp
+                        )
+                    }
+                )
+            }
+
+            Button(
+                onClick = {
+                    hasAttemptedSubmit = true
+                    if (isNameValid) {
+                        onRegister(displayNameInput.trim())
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .border(BorderStroke(1.5.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(10.dp))
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF005F73), Color(0xFF0A9396))), shape = RoundedCornerShape(10.dp))
+                    .testTag("register_continue_button")
+            ) {
+                Text(
+                    text = "ESTABLISH PILOT PROFILE",
+                    color = Color.White,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 13.sp,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 1.sp
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProfileDialog(
+    totalKills: Int,
+    gamesPlayed: Int,
+    highestLevel: Int,
+    totalCoins: Int,
+    onUpdateName: (String) -> Unit,
+    onChangeProfilePicture: () -> Unit,
+    onClose: () -> Unit
+) {
+    val activeUser = AuthManager.currentUser ?: return
+    
+    var isEditingName by remember { mutableStateOf(false) }
+    var nameInput by remember { mutableStateOf(activeUser.name) }
+    val isNameValid = nameInput.trim().length in 3..20
+    var hasError by remember { mutableStateOf(false) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth(0.9f)
+            .border(
+                BorderStroke(2.dp, Brush.horizontalGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080)))),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        containerColor = Color(0xFB0A0F2D),
+        title = {
+            Text(
+                text = "PILOT PROFILE PANEL",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Black,
+                color = Color.White,
+                textAlign = TextAlign.Center,
+                letterSpacing = 1.sp,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    contentAlignment = Alignment.BottomEnd,
+                    modifier = Modifier.size(100.dp)
+                ) {
+                    val localPicFile = remember(activeUser.photoUrl) {
+                        if (activeUser.photoUrl.isNotEmpty()) {
+                            java.io.File(activeUser.photoUrl)
+                        } else null
+                    }
+
+                    if (localPicFile != null && localPicFile.exists()) {
+                        AsyncImage(
+                            model = localPicFile,
+                            contentDescription = "Pilot Avatar",
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clip(CircleShape)
+                                .border(2.dp, Color(0xFF00F0FF), CircleShape)
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .background(Color(0xFF13173A), shape = CircleShape)
+                                .border(2.dp, Color(0xFFFF0080), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("🚀", fontSize = 44.sp)
+                        }
+                    }
+
+                    IconButton(
+                        onClick = onChangeProfilePicture,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(Color(0xFF00F0FF), shape = CircleShape)
+                            .border(1.dp, Color.White, CircleShape)
+                    ) {
+                        Text("📷", fontSize = 14.sp)
+                    }
+                }
+
+                Button(
+                    onClick = onChangeProfilePicture,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0x3300F0FF)),
+                    border = BorderStroke(1.dp, Color(0xFF00F0FF)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .testTag("change_photo_button")
+                ) {
+                    Text("CHANGE PHOTO", color = Color(0xFF00F0FF), fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                }
+
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (isEditingName) {
+                        OutlinedTextField(
+                            value = nameInput,
+                            onValueChange = { nameInput = it },
+                            singleLine = true,
+                            isError = hasError,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = Color.White,
+                                unfocusedTextColor = Color.White,
+                                focusedBorderColor = Color(0xFF00F0FF),
+                                unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                                errorBorderColor = Color(0xFFFF0080)
+                            ),
+                            modifier = Modifier.fillMaxWidth(0.9f).testTag("edit_name_input"),
+                            supportingText = {
+                                Text(
+                                    text = if (hasError) "Must be 3-20 characters" else "Name (3-20 chars)",
+                                    color = if (hasError) Color(0xFFFF0080) else Color.Gray,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    if (isNameValid) {
+                                        onUpdateName(nameInput.trim())
+                                        isEditingName = false
+                                        hasError = false
+                                    } else {
+                                        hasError = true
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00F0FF)),
+                                shape = RoundedCornerShape(6.dp),
+                                modifier = Modifier.testTag("save_name_button")
+                            ) {
+                                Text("SAVE", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = {
+                                    nameInput = activeUser.name
+                                    isEditingName = false
+                                    hasError = false
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.Gray),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text("CANCEL", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    } else {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = activeUser.name,
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.SansSerif
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = { isEditingName = true },
+                                modifier = Modifier.size(24.dp).testTag("edit_name_button")
+                            ) {
+                                Text("✏️", fontSize = 14.sp)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clickable {
+                                    try {
+                                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                        val clip = android.content.ClipData.newPlainText("Player UID", activeUser.id)
+                                        clipboard.setPrimaryClip(clip)
+                                        Toast.makeText(context, "UID copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                    } catch (e: Exception) {
+                                        Log.e("Profile", "Clipboard error", e)
+                                    }
+                                }
+                                .background(Color(0xFF0C1033).copy(alpha = 0.5f), shape = RoundedCornerShape(6.dp))
+                                .border(BorderStroke(1.dp, Color(0xFF00F0FF).copy(alpha = 0.2f)), shape = RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "UID: ${activeUser.id}",
+                                color = Color(0xFF00F0FF),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("📋", fontSize = 10.sp)
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0x3F000000), shape = RoundedCornerShape(12.dp))
+                        .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)), shape = RoundedCornerShape(12.dp))
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "PILOT STATS RECORDED",
+                        color = Color.Gray,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "TOTAL KILLS:", color = Color.White, fontSize = 12.sp)
+                        Text(text = "$totalKills", color = Color(0xFFFF0080), fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "HIGHEST LEVEL:", color = Color.White, fontSize = 12.sp)
+                        Text(text = "LEVEL $highestLevel", color = Color(0xFF00F0FF), fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "TOTAL COINS:", color = Color.White, fontSize = 12.sp)
+                        Text(text = "🪙 $totalCoins", color = Color(0xFFFFD700), fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "GAMES PLAYED:", color = Color.White, fontSize = 12.sp)
+                        Text(text = "$gamesPlayed", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onClose,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(text = "DISMISS", color = Color.White, fontSize = 12.sp)
+            }
+        }
+    )
+}
+
+@Composable
+fun BonusCoinsPopup(onCollect: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onCollect,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        modifier = Modifier
+            .fillMaxWidth(0.85f)
+            .border(
+                BorderStroke(2.dp, Color(0xFFFFD700)),
+                shape = RoundedCornerShape(16.dp)
+            ),
+        containerColor = Color(0xFB0F140A),
+        title = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "🪙 REWARD RECEIVED! 🪙",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFFFD700),
+                    textAlign = TextAlign.Center,
+                    fontFamily = FontFamily.SansSerif
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "PILOT SYNC BONUS",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    fontFamily = FontFamily.Monospace
+                )
+                
+                Text(
+                    text = "+200 COINS",
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFFFFD700),
+                    fontFamily = FontFamily.Monospace
+                )
+
+                Text(
+                    text = "Your first-time authentication bonus has been credited to your account! Spend these coins in the garage to purchase advanced spaceships.",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    fontFamily = FontFamily.SansSerif
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onCollect,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .testTag("collect_bonus_button")
+            ) {
+                Text(
+                    text = "COLLECT COINS",
+                    color = Color.Black,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.SansSerif
+                )
+            }
+        }
+    )
+}
+
 
 
