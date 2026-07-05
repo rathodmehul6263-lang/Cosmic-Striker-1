@@ -343,8 +343,8 @@
                 <span id="coins-display" class="hud-val" style="color: #ffd700; text-shadow: 0 0 8px rgba(255, 215, 0, 0.6);">0000</span>
             </div>
             <div class="hud-item" style="align-items: flex-end;">
-                <span class="hud-label">TOTAL KILLS</span>
-                <span id="total-kills-hud" class="hud-val">0</span>
+                <span class="hud-label">RANK</span>
+                <span id="rank-display" class="hud-val">--</span>
             </div>
         </div>
 
@@ -889,7 +889,7 @@
         const bestScoreDisplay = document.getElementById('best-score');
         const finalScoreDisplay = document.getElementById('final-score');
         const gameOverBestDisplay = document.getElementById('gameover-best');
-        const totalKillsHUDDisplay = document.getElementById('total-kills-hud');
+        const rankDisplay = document.getElementById('rank-display');
         const startScreen = document.getElementById('start-screen');
         const gameOverScreen = document.getElementById('gameover-screen');
         const startButton = document.getElementById('start-button');
@@ -968,11 +968,21 @@
         let runCoins = 0;
         let runTotalKills = 0;
 
-        function updateTotalKillsHUD() {
-            if (totalKillsHUDDisplay) {
-                totalKillsHUDDisplay.textContent = String(runTotalKills);
+        function updateRankHUD() {
+            if (rankDisplay) {
+                if (window.AndroidGame && typeof window.AndroidGame.getPlayerRank === 'function') {
+                    rankDisplay.textContent = window.AndroidGame.getPlayerRank();
+                } else {
+                    rankDisplay.textContent = '--';
+                }
             }
         }
+
+        window.updateRankDisplay = function(rankStr) {
+            if (rankDisplay) {
+                rankDisplay.textContent = rankStr || '--';
+            }
+        };
 
         function recordEnemyKill(scoreVal) {
             score += scoreVal;
@@ -980,7 +990,6 @@
             scoreDisplay.textContent = String(levelKills);
             
             runTotalKills++;
-            updateTotalKillsHUD();
             
             if (window.AndroidGame && typeof window.AndroidGame.onEnemyDestroyed === 'function') {
                 try {
@@ -4114,7 +4123,7 @@
             levelDisplay.textContent = currentLevel;
             updateLivesHUD();
             updateCoinsHUD();
-            updateTotalKillsHUD();
+            updateRankHUD();
             
             startScreen.classList.add('hidden');
             gameOverScreen.classList.add('hidden');

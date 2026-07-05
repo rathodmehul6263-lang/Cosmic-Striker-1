@@ -85,7 +85,7 @@ class MainActivity : ComponentActivity() {
         private const val RC_SIGN_IN = 9001
     }
 
-    private lateinit var leaderboardManager: LeaderboardManager
+    lateinit var leaderboardManager: LeaderboardManager
     private lateinit var backgroundMusicManager: BackgroundMusicManager
     private lateinit var billingManager: BillingManager
     private var showCoinShopDialog by mutableStateOf(false)
@@ -99,6 +99,7 @@ class MainActivity : ComponentActivity() {
     private var finalKills by mutableStateOf(0)
     private var isNewHighScore by mutableStateOf(false)
     private var leaderboardList by mutableStateOf(listOf<LeaderboardEntry>())
+    private var playerRankState by mutableStateOf("--")
     private var isScoreSavedForCurrentGame = false
 
     // Level, Coins, Selected Stage, Statistics states
@@ -339,6 +340,12 @@ class MainActivity : ComponentActivity() {
         AuthManager.syncProfileToFirestore(this)
     }
 
+    fun updateWebViewRank(rank: String) {
+        webView?.post {
+            webView?.evaluateJavascript("if (window.updateRankDisplay) { window.updateRankDisplay('$rank'); }", null)
+        }
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -349,6 +356,25 @@ class MainActivity : ComponentActivity() {
 
         // Load settings permanently from local storage (SharedPreferences)
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        playerRankState = leaderboardManager.getCachedRank()
+
+        AuthManager.onSyncSuccess = {
+            val pUid = prefs.getString("player_uid", null)
+            if (pUid != null) {
+                leaderboardManager.fetchAndCacheGlobalRank(pUid) { rankStr ->
+                    playerRankState = rankStr
+                    updateWebViewRank(rankStr)
+                }
+            }
+        }
+        
+        val pUid = prefs.getString("player_uid", null)
+        if (pUid != null) {
+            leaderboardManager.fetchAndCacheGlobalRank(pUid) { rankStr ->
+                playerRankState = rankStr
+                updateWebViewRank(rankStr)
+            }
+        }
         soundEffectsEnabledState = prefs.getBoolean("settings_sound_effects", true)
         musicEnabledState = prefs.getBoolean("settings_music", true)
         vibrationEnabledState = prefs.getBoolean("settings_vibration", true)
@@ -534,7 +560,8 @@ class MainActivity : ComponentActivity() {
                                     onProfileClick = {
                                         playClickSound()
                                         showProfileDialog = true
-                                    }
+                                    },
+                                    playerRank = playerRankState
                                 )
                             }
                             GameScreen.LEADERBOARD -> {
@@ -712,7 +739,8 @@ class MainActivity : ComponentActivity() {
                                 onClose = {
                                     playClickSound()
                                     showProfileDialog = false
-                                }
+                                },
+                                playerRank = playerRankState
                             )
                         }
 
@@ -940,6 +968,11 @@ class GameInterface(
     @android.webkit.JavascriptInterface
     fun getEquippedShipId(): String {
         return activity.getEquippedShipId()
+    }
+
+    @android.webkit.JavascriptInterface
+    fun getPlayerRank(): String {
+        return activity.leaderboardManager.getCachedRank()
     }
 }
 
@@ -1368,7 +1401,8 @@ fun MainMenuOverlay(
     onBuyShip: (String, Int) -> Unit,
     onCoinShopClick: () -> Unit = {},
     onLeaderboardClick: () -> Unit = {},
-    onProfileClick: () -> Unit = {}
+    onProfileClick: () -> Unit = {},
+    playerRank: String = "--"
 ) {
     var showLeaderboardPanel by remember { mutableStateOf(false) }
 
@@ -1438,7 +1472,7 @@ fun MainMenuOverlay(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = activeUser.name.split(" ").firstOrNull() ?: "Pilot",
+                            text = "${activeUser.name.split(" ").firstOrNull() ?: "Pilot"} ($playerRank)",
                             color = Color.White,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -3626,7 +3660,8 @@ fun ProfileDialog(
     totalCoins: Int,
     onUpdateName: (String) -> Unit,
     onChangeProfilePicture: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    playerRank: String = "--"
 ) {
     val activeUser = AuthManager.currentUser ?: return
     
@@ -3845,6 +3880,14 @@ fun ProfileDialog(
                         fontFamily = FontFamily.Monospace,
                         letterSpacing = 1.sp
                     )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(text = "GLOBAL RANK:", color = Color.White, fontSize = 12.sp)
+                        Text(text = playerRank, color = Color(0xFF00F0FF), fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
                     
                     Row(
                         modifier = Modifier.fillMaxWidth(),

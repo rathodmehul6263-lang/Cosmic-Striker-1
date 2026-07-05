@@ -130,4 +130,60 @@ class LeaderboardManager(context: Context) {
     fun getHighScore(): Int {
         return getTopScores().firstOrNull()?.score ?: 0
     }
+
+    fun getCachedRank(): String {
+        return prefs.getString("cached_global_rank", "--") ?: "--"
+    }
+
+    fun fetchAndCacheGlobalRank(userId: String?, onComplete: (String) -> Unit) {
+        if (userId.isNullOrEmpty()) {
+            onComplete("--")
+            return
+        }
+        try {
+            val db = FirebaseFirestore.getInstance()
+            db.collection("leaderboard")
+                .get()
+                .addOnSuccessListener { result ->
+                    val list = mutableListOf<Triple<String, Long, Long>>() // (userId, highestLevel, totalKills)
+                    val userCoinsMap = mutableMapOf<String, Long>()
+                    
+                    for (document in result) {
+                        val uid = document.id
+                        val level = document.getLong("highestLevel") ?: 1L
+                        val kills = document.getLong("totalKills") ?: 0L
+                        val coins = document.getLong("coins") ?: 0L
+                        list.add(Triple(uid, level, kills))
+                        userCoinsMap[uid] = coins
+                    }
+                    
+                    // Sort locally based on requirements:
+                    // 1. Highest Level (descending)
+                    // 2. Total Kills (descending)
+                    // 3. Highest Coins (descending) - as tie-breaker
+                    val sortedList = list.sortedWith(
+                        compareByDescending<Triple<String, Long, Long>> { it.second } // level
+                            .thenByDescending { it.third } // kills
+                            .thenByDescending { userCoinsMap[it.first] ?: 0L } // coins
+                    )
+                    
+                    val rankIndex = sortedList.indexOfFirst { it.first == userId }
+                    val rankStr = if (rankIndex != -1) {
+                        "#${rankIndex + 1}"
+                    } else {
+                        "--"
+                    }
+                    
+                    prefs.edit().putString("cached_global_rank", rankStr).apply()
+                    onComplete(rankStr)
+                }
+                .addOnFailureListener { e ->
+                    Log.e("LeaderboardManager", "Error calculating global rank", e)
+                    onComplete(getCachedRank())
+                }
+        } catch (e: Exception) {
+            Log.e("LeaderboardManager", "Exception calculating global rank", e)
+            onComplete(getCachedRank())
+        }
+    }
 }

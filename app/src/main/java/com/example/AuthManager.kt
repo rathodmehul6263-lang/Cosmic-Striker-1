@@ -16,6 +16,7 @@ data class UserProfile(
 
 object AuthManager {
     var currentUser by mutableStateOf<UserProfile?>(null)
+    var onSyncSuccess: (() -> Unit)? = null
 
     // Helper to initialize and load the custom profile session
     fun init(context: Context) {
@@ -114,6 +115,7 @@ object AuthManager {
             docRef.set(data, com.google.firebase.firestore.SetOptions.merge())
                 .addOnSuccessListener {
                     Log.d("AuthManager", "Firestore online profile synced successfully")
+                    onSyncSuccess?.invoke()
                 }
                 .addOnFailureListener { e ->
                     Log.e("AuthManager", "Failed to sync Firestore online profile", e)
