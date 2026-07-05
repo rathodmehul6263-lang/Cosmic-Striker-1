@@ -401,16 +401,30 @@ fun OnlineLeaderboardRow(entry: OnlineLeaderboardEntry) {
         else -> "   #${entry.rank}"
     }
 
-    val borderStroke = if (entry.isCurrentUser) {
-        BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080))))
-    } else {
-        BorderStroke(1.dp, Color(0x11FFFFFF))
+    val borderStroke = when (entry.rank) {
+        1 -> BorderStroke(2.dp, Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))) // Gold Glow
+        2 -> BorderStroke(1.5.dp, Brush.horizontalGradient(listOf(Color(0xFFC0C0C0), Color(0xFFE2E8F0)))) // Silver Glow
+        3 -> BorderStroke(1.5.dp, Brush.horizontalGradient(listOf(Color(0xFFCD7F32), Color(0xFFB45309)))) // Bronze Glow
+        else -> {
+            if (entry.isCurrentUser) {
+                BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080))))
+            } else {
+                BorderStroke(1.dp, Color(0x11FFFFFF))
+            }
+        }
     }
 
-    val bgGradient = if (entry.isCurrentUser) {
-        Brush.horizontalGradient(listOf(Color(0x3300F0FF), Color(0x33FF0080)))
-    } else {
-        Brush.horizontalGradient(listOf(Color(0x0AFFFFFF), Color(0x02FFFFFF)))
+    val bgGradient = when (entry.rank) {
+        1 -> Brush.horizontalGradient(listOf(Color(0x22FFD700), Color(0x0FFF8C00)))
+        2 -> Brush.horizontalGradient(listOf(Color(0x22C0C0C0), Color(0x0FE2E8F0)))
+        3 -> Brush.horizontalGradient(listOf(Color(0x22CD7F32), Color(0x0FB45309)))
+        else -> {
+            if (entry.isCurrentUser) {
+                Brush.horizontalGradient(listOf(Color(0x3300F0FF), Color(0x33FF0080)))
+            } else {
+                Brush.horizontalGradient(listOf(Color(0x0AFFFFFF), Color(0x02FFFFFF)))
+            }
+        }
     }
 
     // Decode base64 image if available

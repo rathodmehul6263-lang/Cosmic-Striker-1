@@ -3892,12 +3892,18 @@ fun ProfileDialog(
                         letterSpacing = 1.sp
                     )
                     
+                    val rankColor = when {
+                        playerRank.contains("#1") || playerRank == "1" -> Color(0xFFFFD700)
+                        playerRank.contains("#2") || playerRank == "2" -> Color(0xFFC0C0C0)
+                        playerRank.contains("#3") || playerRank == "3" -> Color(0xFFCD7F32)
+                        else -> Color(0xFF00F0FF)
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(text = "GLOBAL RANK:", color = Color.White, fontSize = 12.sp)
-                        Text(text = playerRank, color = Color(0xFF00F0FF), fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        Text(text = playerRank, color = rankColor, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                     }
                     
                     Row(
