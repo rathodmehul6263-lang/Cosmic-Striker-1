@@ -286,6 +286,13 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, "Pilot name updated!", Toast.LENGTH_SHORT).show()
     }
 
+    fun onEnemyDestroyed() {
+        totalKillsState += 1
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putInt("total_kills_stat", totalKillsState).apply()
+        AuthManager.syncProfileToFirestore(this)
+    }
+
     override fun onResume() {
         super.onResume()
         if (::backgroundMusicManager.isInitialized) {
@@ -317,9 +324,17 @@ class MainActivity : ComponentActivity() {
     }
 
     fun submitScoreToOnlineLeaderboard(score: Int, kills: Int) {
-        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
-        totalKillsState += kills
-        prefs.edit().putInt("total_kills_stat", totalKillsState).apply()
+        val user = AuthManager.currentUser
+        if (user != null) {
+            val coins = getTotalCoins()
+            leaderboardManager.updateOnlineLeaderboard(
+                userId = user.id,
+                displayName = user.name,
+                newScore = score,
+                killsEarned = kills,
+                currentCoins = coins
+            )
+        }
         AuthManager.syncProfileToFirestore(this)
     }
 
@@ -850,6 +865,13 @@ class GameInterface(
     fun saveNativeScore(score: Int, kills: Int) {
         activity.runOnUiThread {
             saveScore(score, kills)
+        }
+    }
+
+    @android.webkit.JavascriptInterface
+    fun onEnemyDestroyed() {
+        activity.runOnUiThread {
+            activity.onEnemyDestroyed()
         }
     }
 

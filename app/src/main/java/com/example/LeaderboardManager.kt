@@ -24,12 +24,13 @@ class LeaderboardManager(context: Context) {
         try {
             val db = FirebaseFirestore.getInstance()
             val docRef = db.collection("leaderboard").document(userId)
+            val localTotalKills = prefs.getInt("total_kills_stat", 0).toLong()
             docRef.get().addOnSuccessListener { document ->
                 if (document != null && document.exists()) {
                     val currentHighest = document.getLong("highestScore") ?: 0L
                     val currentKills = document.getLong("totalKills") ?: 0L
                     val finalHighest = maxOf(currentHighest, newScore.toLong())
-                    val finalKills = currentKills + killsEarned.toLong()
+                    val finalKills = maxOf(localTotalKills, currentKills)
 
                     val updates = hashMapOf<String, Any>(
                         "displayName" to displayName,
@@ -49,7 +50,7 @@ class LeaderboardManager(context: Context) {
                     val data = hashMapOf<String, Any>(
                         "displayName" to displayName,
                         "highestScore" to newScore,
-                        "totalKills" to killsEarned,
+                        "totalKills" to localTotalKills,
                         "coins" to currentCoins,
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
@@ -66,7 +67,7 @@ class LeaderboardManager(context: Context) {
                 val data = hashMapOf<String, Any>(
                     "displayName" to displayName,
                     "highestScore" to newScore,
-                    "totalKills" to killsEarned,
+                    "totalKills" to localTotalKills,
                     "coins" to currentCoins,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )

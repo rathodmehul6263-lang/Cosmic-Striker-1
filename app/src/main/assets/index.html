@@ -3698,6 +3698,13 @@
                             score += enemy.scoreVal;
                             levelKills++;
                             scoreDisplay.textContent = String(levelKills);
+                            if (window.AndroidGame && typeof window.AndroidGame.onEnemyDestroyed === 'function') {
+                                try {
+                                    window.AndroidGame.onEnemyDestroyed();
+                                } catch(e) {
+                                    console.error("Error calling onEnemyDestroyed", e);
+                                }
+                            }
 
                             // Nova Destroyer splash damage
                             if (shipStats && shipStats.novaExplosion) {
@@ -3725,6 +3732,13 @@
                                                 score += otherEnemy.scoreVal;
                                                 levelKills++;
                                                 scoreDisplay.textContent = String(levelKills);
+                                                if (window.AndroidGame && typeof window.AndroidGame.onEnemyDestroyed === 'function') {
+                                                    try {
+                                                        window.AndroidGame.onEnemyDestroyed();
+                                                    } catch(e) {
+                                                        console.error("Error calling onEnemyDestroyed", e);
+                                                    }
+                                                }
                                                 
                                                 if (levelState === 'PLAYING' && levelKills >= targetKills) {
                                                     const lvlBoss = LEVELS[currentLevel]?.boss;
@@ -3954,6 +3968,13 @@
             levelKills++;
             scoreDisplay.textContent = String(levelKills);
             sound.playGameOver();
+            if (window.AndroidGame && typeof window.AndroidGame.onEnemyDestroyed === 'function') {
+                try {
+                    window.AndroidGame.onEnemyDestroyed();
+                } catch(e) {
+                    console.error("Error calling onEnemyDestroyed", e);
+                }
+            }
         }
 
         function levelSecured() {
