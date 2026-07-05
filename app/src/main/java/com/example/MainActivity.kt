@@ -633,7 +633,7 @@ class MainActivity : ComponentActivity() {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .padding(top = 40.dp, end = 16.dp),
+                                            .padding(top = 75.dp, end = 16.dp),
                                         contentAlignment = Alignment.TopEnd
                                     ) {
                                         IconButton(
