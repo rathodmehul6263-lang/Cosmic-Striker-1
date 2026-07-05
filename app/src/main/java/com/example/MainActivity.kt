@@ -96,6 +96,7 @@ class MainActivity : ComponentActivity() {
     // Compose state variables
     private var currentScreen by mutableStateOf(GameScreen.MENU)
     private var finalScore by mutableStateOf(0)
+    private var finalKills by mutableStateOf(0)
     private var isNewHighScore by mutableStateOf(false)
     private var leaderboardList by mutableStateOf(listOf<LeaderboardEntry>())
     private var isScoreSavedForCurrentGame = false
@@ -548,6 +549,7 @@ class MainActivity : ComponentActivity() {
                             GameScreen.GAMEOVER -> {
                                 GameOverOverlay(
                                     score = finalScore,
+                                    kills = finalKills,
                                     isNewHighScore = isNewHighScore,
                                     topScores = leaderboardList,
                                     onDeployAgain = {
@@ -784,6 +786,7 @@ class MainActivity : ComponentActivity() {
                         activity = this@MainActivity,
                         onGameOver = { score, kills ->
                             finalScore = score
+                            finalKills = kills
                             if (!isScoreSavedForCurrentGame) {
                                 isNewHighScore = leaderboardManager.addScore(score)
                                 leaderboardList = leaderboardManager.getTopScores()
@@ -804,6 +807,7 @@ class MainActivity : ComponentActivity() {
                             leaderboardManager.getHighScore()
                         },
                         saveScore = { score, kills ->
+                            finalKills = kills
                             if (!isScoreSavedForCurrentGame) {
                                 val isNewHigh = leaderboardManager.addScore(score)
                                 leaderboardList = leaderboardManager.getTopScores()
@@ -1979,6 +1983,7 @@ fun LeaderboardRow(rank: Int, entry: LeaderboardEntry) {
 @Composable
 fun GameOverOverlay(
     score: Int,
+    kills: Int,
     isNewHighScore: Boolean,
     topScores: List<LeaderboardEntry>,
     onDeployAgain: () -> Unit,
@@ -2038,24 +2043,48 @@ fun GameOverOverlay(
                         .padding(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "FINAL SCORE",
-                        fontSize = 11.sp,
-                        color = Color(0xFFFF9F9F),
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = String.format("%,d", score),
-                        fontSize = 36.sp,
-                        color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = FontFamily.Monospace
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "FINAL SCORE",
+                                fontSize = 11.sp,
+                                color = Color(0xFFFF9F9F),
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = String.format("%,d", score),
+                                fontSize = 28.sp,
+                                color = Color.White,
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = "TOTAL KILLS",
+                                fontSize = 11.sp,
+                                color = Color(0xFFFF9F9F),
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = String.format("%,d", kills),
+                                fontSize = 28.sp,
+                                color = Color(0xFFFF0055),
+                                fontWeight = FontWeight.Black,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
                     
                     if (isNewHighScore) {
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
                         Text(
                             text = "🔥 NEW BEST HIGH SCORE! 🔥",
                             fontSize = 14.sp,

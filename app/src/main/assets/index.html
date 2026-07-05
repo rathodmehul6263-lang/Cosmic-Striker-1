@@ -343,8 +343,8 @@
                 <span id="coins-display" class="hud-val" style="color: #ffd700; text-shadow: 0 0 8px rgba(255, 215, 0, 0.6);">0000</span>
             </div>
             <div class="hud-item" style="align-items: flex-end;">
-                <span class="hud-label">Best</span>
-                <span id="high-score-display" class="hud-val">00000</span>
+                <span class="hud-label">TOTAL KILLS</span>
+                <span id="total-kills-hud" class="hud-val">0</span>
             </div>
         </div>
 
@@ -410,6 +410,10 @@
                     <div class="stat-row">
                         <span class="stat-label">Final Score</span>
                         <span id="final-score" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Total Kills</span>
+                        <span id="gameover-kills" class="stat-value">0</span>
                     </div>
                     <div class="stat-row">
                         <span class="stat-label">High Score</span>
@@ -885,7 +889,7 @@
         const bestScoreDisplay = document.getElementById('best-score');
         const finalScoreDisplay = document.getElementById('final-score');
         const gameOverBestDisplay = document.getElementById('gameover-best');
-        const highScoreDisplay = document.getElementById('high-score-display');
+        const totalKillsHUDDisplay = document.getElementById('total-kills-hud');
         const startScreen = document.getElementById('start-screen');
         const gameOverScreen = document.getElementById('gameover-screen');
         const startButton = document.getElementById('start-button');
@@ -962,6 +966,30 @@
         let targetKills = 35;
         let totalCoins = 0;
         let runCoins = 0;
+        let runTotalKills = 0;
+
+        function updateTotalKillsHUD() {
+            if (totalKillsHUDDisplay) {
+                totalKillsHUDDisplay.textContent = String(runTotalKills);
+            }
+        }
+
+        function recordEnemyKill(scoreVal) {
+            score += scoreVal;
+            levelKills++;
+            scoreDisplay.textContent = String(levelKills);
+            
+            runTotalKills++;
+            updateTotalKillsHUD();
+            
+            if (window.AndroidGame && typeof window.AndroidGame.onEnemyDestroyed === 'function') {
+                try {
+                    window.AndroidGame.onEnemyDestroyed();
+                } catch(e) {
+                    console.error("Error calling onEnemyDestroyed", e);
+                }
+            }
+        }
         let levelState = 'PLAYING'; // 'PLAYING' | 'BOSS_INCOMING' | 'BOSS_FIGHT' | 'COMPLETED'
         let activeBoss = null;
         let bossIncomingTimer = 0;
@@ -1029,7 +1057,7 @@
             isScoreSaved = true;
             try {
                 if (window.AndroidGame && typeof window.AndroidGame.saveNativeScore === 'function') {
-                    window.AndroidGame.saveNativeScore(score, levelKills || 0);
+                    window.AndroidGame.saveNativeScore(score, runTotalKills || 0);
                 }
             } catch (e) {
                 console.error("Native saveNativeScore error", e);
@@ -1045,7 +1073,6 @@
             const high = getHighScore();
             const formatted = String(high).padStart(5, '0');
             if (bestScoreDisplay) bestScoreDisplay.textContent = formatted;
-            if (highScoreDisplay) highScoreDisplay.textContent = formatted;
             if (gameOverBestDisplay) gameOverBestDisplay.textContent = formatted;
         }
 
@@ -3695,16 +3722,7 @@
                         if (enemy.hp <= 0) {
                             enemy.active = false;
                             spawnExplosion(enemy.x, enemy.y, enemy.color, 16);
-                            score += enemy.scoreVal;
-                            levelKills++;
-                            scoreDisplay.textContent = String(levelKills);
-                            if (window.AndroidGame && typeof window.AndroidGame.onEnemyDestroyed === 'function') {
-                                try {
-                                    window.AndroidGame.onEnemyDestroyed();
-                                } catch(e) {
-                                    console.error("Error calling onEnemyDestroyed", e);
-                                }
-                            }
+                            recordEnemyKill(enemy.scoreVal);
 
                             // Nova Destroyer splash damage
                             if (shipStats && shipStats.novaExplosion) {
@@ -3729,16 +3747,7 @@
                                             spawnExplosion(otherEnemy.x, otherEnemy.y, '#ff00ff', 4);
                                             if (otherEnemy.hp <= 0) {
                                                 otherEnemy.active = false;
-                                                score += otherEnemy.scoreVal;
-                                                levelKills++;
-                                                scoreDisplay.textContent = String(levelKills);
-                                                if (window.AndroidGame && typeof window.AndroidGame.onEnemyDestroyed === 'function') {
-                                                    try {
-                                                        window.AndroidGame.onEnemyDestroyed();
-                                                    } catch(e) {
-                                                        console.error("Error calling onEnemyDestroyed", e);
-                                                    }
-                                                }
+                                                recordEnemyKill(otherEnemy.scoreVal);
                                                 
                                                 if (levelState === 'PLAYING' && levelKills >= targetKills) {
                                                     const lvlBoss = LEVELS[currentLevel]?.boss;
@@ -3964,17 +3973,8 @@
             levelState = 'BOSS_DESTRUCTION';
             bossDestructionTimer = 1800; // 1.8s explosion sequence
             bossExplosionTimer = 0;
-            score += 1000;
-            levelKills++;
-            scoreDisplay.textContent = String(levelKills);
+            recordEnemyKill(1000);
             sound.playGameOver();
-            if (window.AndroidGame && typeof window.AndroidGame.onEnemyDestroyed === 'function') {
-                try {
-                    window.AndroidGame.onEnemyDestroyed();
-                } catch(e) {
-                    console.error("Error calling onEnemyDestroyed", e);
-                }
-            }
         }
 
         function levelSecured() {
@@ -4056,6 +4056,9 @@
             spawnInterval = SPAWN_INTERVAL_BASE;
 
             currentLevel = levelNum || 1;
+            if (currentLevel === 1) {
+                runTotalKills = 0;
+            }
             levelKills = 0;
             targetKills = LEVELS[currentLevel]?.targetKills || 35;
             levelState = 'PLAYING';
@@ -4111,6 +4114,7 @@
             levelDisplay.textContent = currentLevel;
             updateLivesHUD();
             updateCoinsHUD();
+            updateTotalKillsHUD();
             
             startScreen.classList.add('hidden');
             gameOverScreen.classList.add('hidden');
@@ -4156,12 +4160,15 @@
             bossHud.classList.add('hidden');
             controlHint.style.display = 'none';
             finalScoreDisplay.textContent = score;
+            if (document.getElementById('gameover-kills')) {
+                document.getElementById('gameover-kills').textContent = runTotalKills;
+            }
             
             checkAndSaveScore();
             
             try {
                 if (window.AndroidGame && typeof window.AndroidGame.gameOver === 'function') {
-                    window.AndroidGame.gameOver(score, levelKills || 0);
+                    window.AndroidGame.gameOver(score, runTotalKills || 0);
                 } else {
                     gameOverScreen.classList.remove('hidden');
                 }
@@ -4169,6 +4176,8 @@
                 gameOverScreen.classList.remove('hidden');
                 console.error(e);
             }
+
+            runTotalKills = 0;
         }
 
         window.pauseGame = function() {
