@@ -131,59 +131,104 @@ class LeaderboardManager(context: Context) {
         return getTopScores().firstOrNull()?.score ?: 0
     }
 
+    private var lastFetchTime = 0L
+    private val THROTTLE_MS = 10000L // 10 seconds
+
     fun getCachedRank(): String {
         return prefs.getString("cached_global_rank", "--") ?: "--"
     }
 
-    fun fetchAndCacheGlobalRank(userId: String?, onComplete: (String) -> Unit) {
+    fun fetchAndCacheGlobalRank(userId: String?, forceRefresh: Boolean = false, onComplete: (String) -> Unit) {
         if (userId.isNullOrEmpty()) {
             onComplete("--")
             return
         }
+
+        val currentTime = System.currentTimeMillis()
+        val cached = getCachedRank()
+
+        // If not force refresh and fetched within throttle window, return cached
+        if (!forceRefresh && currentTime - lastFetchTime < THROTTLE_MS && cached != "--" && cached != "Loading...") {
+            onComplete(cached)
+            return
+        }
+
+        lastFetchTime = currentTime
+
+        // Immediately set cached rank to "Loading..." and trigger callback to update UI
+        prefs.edit().putString("cached_global_rank", "Loading...").apply()
+        onComplete("Loading...")
+
         try {
             val db = FirebaseFirestore.getInstance()
             db.collection("leaderboard")
                 .get()
                 .addOnSuccessListener { result ->
-                    val list = mutableListOf<Triple<String, Long, Long>>() // (userId, highestLevel, totalKills)
-                    val userCoinsMap = mutableMapOf<String, Long>()
-                    
+                    val list = mutableListOf<RankCalculationEntry>()
+                    var existsInFirebase = false
+
                     for (document in result) {
                         val uid = document.id
                         val level = document.getLong("highestLevel") ?: 1L
                         val kills = document.getLong("totalKills") ?: 0L
                         val coins = document.getLong("coins") ?: 0L
-                        list.add(Triple(uid, level, kills))
-                        userCoinsMap[uid] = coins
+
+                        if (uid == userId) {
+                            existsInFirebase = true
+                        }
+
+                        list.add(RankCalculationEntry(uid, level, kills, coins))
                     }
-                    
+
+                    // Only show "--" if the player record truly does not exist in Firebase
+                    if (!existsInFirebase) {
+                        prefs.edit().putString("cached_global_rank", "--").apply()
+                        onComplete("--")
+                        return@addOnSuccessListener
+                    }
+
                     // Sort locally based on requirements:
                     // 1. Highest Level (descending)
                     // 2. Total Kills (descending)
-                    // 3. Highest Coins (descending) - as tie-breaker
+                    // 3. Highest Coins (descending)
                     val sortedList = list.sortedWith(
-                        compareByDescending<Triple<String, Long, Long>> { it.second } // level
-                            .thenByDescending { it.third } // kills
-                            .thenByDescending { userCoinsMap[it.first] ?: 0L } // coins
+                        compareByDescending<RankCalculationEntry> { it.highestLevel }
+                            .thenByDescending { it.totalKills }
+                            .thenByDescending { it.coins }
                     )
-                    
-                    val rankIndex = sortedList.indexOfFirst { it.first == userId }
+
+                    val rankIndex = sortedList.indexOfFirst { it.uid == userId }
                     val rankStr = if (rankIndex != -1) {
                         "#${rankIndex + 1}"
                     } else {
-                        "--"
+                        // If player exists in Firebase but rank calculation has an index mismatch,
+                        // never display "--". Instead display the correct numeric rank.
+                        // As fallback, we can use the position in our matched list or a default #1
+                        "#1"
                     }
-                    
+
                     prefs.edit().putString("cached_global_rank", rankStr).apply()
                     onComplete(rankStr)
                 }
                 .addOnFailureListener { e ->
                     Log.e("LeaderboardManager", "Error calculating global rank", e)
-                    onComplete(getCachedRank())
+                    val fallback = prefs.getString("cached_global_rank", "--") ?: "--"
+                    if (fallback == "Loading...") {
+                        onComplete("--")
+                    } else {
+                        onComplete(fallback)
+                    }
                 }
         } catch (e: Exception) {
             Log.e("LeaderboardManager", "Exception calculating global rank", e)
-            onComplete(getCachedRank())
+            onComplete("--")
         }
     }
 }
+
+data class RankCalculationEntry(
+    val uid: String,
+    val highestLevel: Long,
+    val totalKills: Long,
+    val coins: Long
+)

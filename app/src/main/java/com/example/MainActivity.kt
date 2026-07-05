@@ -361,7 +361,8 @@ class MainActivity : ComponentActivity() {
         AuthManager.onSyncSuccess = {
             val pUid = prefs.getString("player_uid", null)
             if (pUid != null) {
-                leaderboardManager.fetchAndCacheGlobalRank(pUid) { rankStr ->
+                val isGameOverOrComplete = currentScreen == GameScreen.GAMEOVER || currentScreen == GameScreen.LEVEL_COMPLETE
+                leaderboardManager.fetchAndCacheGlobalRank(pUid, forceRefresh = isGameOverOrComplete) { rankStr ->
                     playerRankState = rankStr
                     updateWebViewRank(rankStr)
                 }
@@ -370,7 +371,7 @@ class MainActivity : ComponentActivity() {
         
         val pUid = prefs.getString("player_uid", null)
         if (pUid != null) {
-            leaderboardManager.fetchAndCacheGlobalRank(pUid) { rankStr ->
+            leaderboardManager.fetchAndCacheGlobalRank(pUid, forceRefresh = true) { rankStr ->
                 playerRankState = rankStr
                 updateWebViewRank(rankStr)
             }

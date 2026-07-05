@@ -191,6 +191,15 @@ fun LeaderboardScreen(
             // Sub-headline / Connection Status info
             val activeUser = AuthManager.currentUser
             if (activeUser != null) {
+                val currentUserEntry = leaderboardEntries.firstOrNull { it.isCurrentUser }
+                val personalRankText = if (isLoading) {
+                    "Loading..."
+                } else if (currentUserEntry != null) {
+                    "#${currentUserEntry.rank}"
+                } else {
+                    "--"
+                }
+
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color(0x2200F0FF)),
                     border = BorderStroke(1.dp, Color(0x4400F0FF)),
@@ -203,21 +212,34 @@ fun LeaderboardScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(Color.Green, shape = RoundedCornerShape(4.dp))
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(Color.Green, shape = RoundedCornerShape(4.dp))
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Connected as: ${activeUser.name}",
+                                color = Color(0xFF8FA0DD),
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                         Text(
-                            text = "Connected as: ${activeUser.name} (UID: ${activeUser.id})",
-                            color = Color(0xFF8FA0DD),
+                            text = "GLOBAL RANK: $personalRankText",
+                            color = Color(0xFF00F0FF),
                             fontSize = 12.sp,
-                            fontFamily = FontFamily.Monospace,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
                         )
                     }
                 }
