@@ -2809,13 +2809,13 @@ data class Spaceship(
 
 val SPACESHIPS_LIST = listOf(
     Spaceship("falcon", "Falcon Mk-I", 0, "Balanced Federation Specs", 0.5f, 0.4f, 0.5f, 0.5f, Color(0xFFFF6A00), Color(0xFF00F0FF), "Standard Federation starfighter. Highly reliable and versatile."),
-    Spaceship("lightning", "Lightning X", 500, "⚡ +20% Fire Rate & Speed boost", 0.7f, 0.4f, 0.5f, 0.8f, Color(0xFF00FFFF), Color(0xFFFFD700), "Sleek interceptor with hyper-charged capacitor cores for lightning speed."),
-    Spaceship("titan", "Titan Defender", 1500, "🛡️ +40% Reinforced Shield Shell", 0.3f, 0.5f, 0.9f, 0.3f, Color(0xFF00FF00), Color(0xFF39FF14), "Heavy armored dreadnought designed to withstand devastating cosmic attacks."),
-    Spaceship("phoenix", "Phoenix Blaster", 3000, "🔥 Double Bullet Kinetic Damage", 0.5f, 0.8f, 0.4f, 0.5f, Color(0xFFFF0000), Color(0xFFFF4500), "Equipped with hyper-dense plasma chargers that incinerate enemy fleets."),
-    Spaceship("frost", "Frost Wing", 5000, "❄️ Emits Sub-Zero 20% Time Dilation", 0.6f, 0.5f, 0.6f, 0.5f, Color(0xFF87CEFA), Color(0xFF00BFFF), "Fires chronal freeze-pulses that delay and slow down all incoming threats."),
-    Spaceship("nova", "Nova Destroyer", 8000, "💥 Explosive Kinetic Shockwave Splash", 0.4f, 0.7f, 0.7f, 0.4f, Color(0xFF8A2BE2), Color(0xFFFF00FF), "Generates collateral micro-nova blasts upon securing enemy destructions."),
-    Spaceship("phantom", "Phantom Stealth", 12000, "👤 5-Second Phase-Cloak Invincibility", 0.8f, 0.5f, 0.5f, 0.6f, Color(0xFF4B0082), Color(0xFF9370DB), "Phase-shifts on launch, granting five seconds of complete invulnerability."),
-    Spaceship("cosmic", "Cosmic Emperor", 20000, "👑 Legendary Golden 5-Way Bullet Spread", 0.9f, 1.0f, 0.9f, 0.9f, Color(0xFFFF1493), Color(0xFFFFEA00), "The supreme imperial flagship. Fires devastating 5-way cosmic blasters.")
+    Spaceship("lightning", "Lightning X", 1000, "⚡ +20% Fire Rate & Speed boost", 0.7f, 0.4f, 0.5f, 0.8f, Color(0xFF00FFFF), Color(0xFFFFD700), "Sleek interceptor with hyper-charged capacitor cores for lightning speed."),
+    Spaceship("titan", "Titan Defender", 3000, "🛡️ +40% Reinforced Shield Shell", 0.3f, 0.5f, 0.9f, 0.3f, Color(0xFF00FF00), Color(0xFF39FF14), "Heavy armored dreadnought designed to withstand devastating cosmic attacks."),
+    Spaceship("phoenix", "Phoenix Blaster", 6000, "🔥 Double Bullet Kinetic Damage", 0.5f, 0.8f, 0.4f, 0.5f, Color(0xFFFF0000), Color(0xFFFF4500), "Equipped with hyper-dense plasma chargers that incinerate enemy fleets."),
+    Spaceship("frost", "Frost Wing", 10000, "❄️ Emits Sub-Zero 20% Time Dilation", 0.6f, 0.5f, 0.6f, 0.5f, Color(0xFF87CEFA), Color(0xFF00BFFF), "Fires chronal freeze-pulses that delay and slow down all incoming threats."),
+    Spaceship("nova", "Nova Destroyer", 16000, "💥 Explosive Kinetic Shockwave Splash", 0.4f, 0.7f, 0.7f, 0.4f, Color(0xFF8A2BE2), Color(0xFFFF00FF), "Generates collateral micro-nova blasts upon securing enemy destructions."),
+    Spaceship("phantom", "Phantom Stealth", 24000, "👤 5-Second Phase-Cloak Invincibility", 0.8f, 0.5f, 0.5f, 0.6f, Color(0xFF4B0082), Color(0xFF9370DB), "Phase-shifts on launch, granting five seconds of complete invulnerability."),
+    Spaceship("cosmic", "Cosmic Emperor", 40000, "👑 Legendary Golden 5-Way Bullet Spread", 0.9f, 1.0f, 0.9f, 0.9f, Color(0xFFFF1493), Color(0xFFFFEA00), "The supreme imperial flagship. Fires devastating 5-way cosmic blasters.")
 )
 
 @Composable
