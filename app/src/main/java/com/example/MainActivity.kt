@@ -361,8 +361,7 @@ class MainActivity : ComponentActivity() {
         AuthManager.onSyncSuccess = {
             val pUid = prefs.getString("player_uid", null)
             if (pUid != null) {
-                val isGameOverOrComplete = currentScreen == GameScreen.GAMEOVER || currentScreen == GameScreen.LEVEL_COMPLETE
-                leaderboardManager.fetchAndCacheGlobalRank(pUid, forceRefresh = isGameOverOrComplete) { rankStr ->
+                leaderboardManager.fetchAndCacheGlobalRank(pUid, forceRefresh = true) { rankStr ->
                     playerRankState = rankStr
                     updateWebViewRank(rankStr)
                 }
@@ -560,6 +559,13 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onProfileClick = {
                                         playClickSound()
+                                        val pUid = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE).getString("player_uid", null)
+                                        if (pUid != null) {
+                                            leaderboardManager.fetchAndCacheGlobalRank(pUid, forceRefresh = true) { rankStr ->
+                                                playerRankState = rankStr
+                                                updateWebViewRank(rankStr)
+                                            }
+                                        }
                                         showProfileDialog = true
                                     },
                                     playerRank = playerRankState
@@ -571,6 +577,10 @@ class MainActivity : ComponentActivity() {
                                     onClose = {
                                         playClickSound()
                                         currentScreen = GameScreen.MENU
+                                    },
+                                    onRankCalculated = { rankStr ->
+                                        playerRankState = rankStr
+                                        updateWebViewRank(rankStr)
                                     }
                                 )
                             }

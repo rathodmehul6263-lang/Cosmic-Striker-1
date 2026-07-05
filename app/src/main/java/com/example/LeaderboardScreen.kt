@@ -45,8 +45,10 @@ data class OnlineLeaderboardEntry(
 @Composable
 fun LeaderboardScreen(
     currentUserId: String?,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onRankCalculated: ((String) -> Unit)? = null
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var leaderboardEntries by remember { mutableStateOf<List<OnlineLeaderboardEntry>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -99,6 +101,21 @@ fun LeaderboardScreen(
 
                     leaderboardEntries = sortedList
                     isLoading = false
+
+                    // Sync the calculated rank of the logged-in user to the shared state and preferences
+                    if (currentUserId != null) {
+                        val currentUserEntry = sortedList.firstOrNull { it.userId == currentUserId }
+                        val rankStr = if (currentUserEntry != null) {
+                            "#${currentUserEntry.rank}"
+                        } else {
+                            "--"
+                        }
+                        if (rankStr != "--") {
+                            val prefs = context.getSharedPreferences("cosmic_striker_prefs", android.content.Context.MODE_PRIVATE)
+                            prefs.edit().putString("cached_global_rank", rankStr).apply()
+                            onRankCalculated?.invoke(rankStr)
+                        }
+                    }
                 }
                 .addOnFailureListener { e ->
                     Log.e("LeaderboardScreen", "Error reading online leaderboard", e)
