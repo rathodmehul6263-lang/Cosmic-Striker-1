@@ -80,6 +80,21 @@ enum class GameScreen {
     LEADERBOARD
 }
 
+fun getUpgradeCostForLevel(level: Int): Int {
+    return when (level) {
+        1 -> 200
+        2 -> 400
+        3 -> 700
+        4 -> 1000
+        5 -> 1400
+        6 -> 1900
+        7 -> 2500
+        8 -> 3200
+        9 -> 4000
+        else -> 5000
+    }
+}
+
 class MainActivity : ComponentActivity() {
     companion object {
         private const val RC_SIGN_IN = 9001
@@ -109,6 +124,37 @@ class MainActivity : ComponentActivity() {
     private var coinsEarnedState by mutableStateOf(0)
     private var gamesPlayedState by mutableStateOf(0)
     private var totalKillsState by mutableStateOf(0)
+
+    // Upgrades state variables
+    private var damageUpgradeLevelState by mutableStateOf(1)
+    private var fireRateUpgradeLevelState by mutableStateOf(1)
+    private var shieldUpgradeLevelState by mutableStateOf(1)
+    private var speedUpgradeLevelState by mutableStateOf(1)
+
+    // Daily rewards state variables
+    private var dailyStreakDayState by mutableStateOf(1)
+    private var lastRewardClaimTimeState by mutableStateOf(0L)
+    private var showDailyRewardsPopup by mutableStateOf(false)
+
+    // Custom Skins state variables
+    private var isExclusiveSkinUnlockedState by mutableStateOf(false)
+    private var isLegendarySkinUnlockedState by mutableStateOf(false)
+    private var isExclusiveSkinEnabledState by mutableStateOf(false)
+    private var isLegendarySkinEnabledState by mutableStateOf(false)
+
+    // Achievements Dialog state variables
+    data class AchievementPopupData(val id: String, val title: String, val description: String, val coinReward: Int)
+    private var activeAchievementPopup by mutableStateOf<AchievementPopupData?>(null)
+    private var showAchievementsDialog by mutableStateOf(false)
+
+    // Upgrade Dialog state variable
+    private var showUpgradeDialog by mutableStateOf(false)
+
+    // Ads simulator state variables
+    private var showAdSimulator by mutableStateOf(false)
+    private var adRewardAction by mutableStateOf<(() -> Unit)?>(null)
+    private var adCountdownSeconds by mutableStateOf(5)
+    private var continuedThisGame by mutableStateOf(false)
 
     fun onLevelCompleted(coinsEarned: Int, totalCoins: Int) {
         coinsEarnedState = coinsEarned
@@ -288,10 +334,156 @@ class MainActivity : ComponentActivity() {
         Toast.makeText(this, "Pilot name updated!", Toast.LENGTH_SHORT).show()
     }
 
+    fun getUpgradeLevel(statName: String): Int {
+        return when (statName) {
+            "damage" -> damageUpgradeLevelState
+            "fire_rate" -> fireRateUpgradeLevelState
+            "shield" -> shieldUpgradeLevelState
+            "speed" -> speedUpgradeLevelState
+            else -> 1
+        }
+    }
+
+    fun isExclusiveSkinEnabled(): Boolean = isExclusiveSkinEnabledState
+    fun isLegendarySkinEnabled(): Boolean = isLegendarySkinEnabledState
+
+    fun checkDailyRewards() {
+        val now = System.currentTimeMillis()
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        val lastClaim = prefs.getLong("last_reward_claim_time", 0L)
+        val elapsed = now - lastClaim
+        
+        // Consecutive Login Streak Expiration logic:
+        // If they claimed before, but more than 48 hours have elapsed, they missed a day.
+        // Reset streak back to Day 1!
+        if (lastClaim > 0L && elapsed >= 48 * 60 * 60 * 1000L) {
+            dailyStreakDayState = 1
+            prefs.edit().putInt("daily_streak_day", 1).apply()
+        }
+
+        // Auto show Daily Login Reward Popup if eligible on launch
+        if (elapsed >= 24 * 60 * 60 * 1000L) {
+            showDailyRewardsPopup = true
+        }
+    }
+
+    fun claimDailyReward() {
+        val now = System.currentTimeMillis()
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        
+        val lastClaim = prefs.getLong("last_reward_claim_time", 0L)
+        val elapsed = now - lastClaim
+        if (elapsed < 24 * 60 * 60 * 1000L) {
+            Toast.makeText(this, "Reward already claimed today!", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val rewardAmount = when (dailyStreakDayState) {
+            1 -> 100
+            2 -> 150
+            3 -> 200
+            4 -> 250
+            5 -> 300
+            6 -> 400
+            7 -> 0 // Exclusive Skin Reward
+            else -> 100
+        }
+
+        if (dailyStreakDayState == 7) {
+            val alreadyUnlocked = isExclusiveSkinUnlockedState
+            isExclusiveSkinUnlockedState = true
+            prefs.edit().putBoolean("exclusive_skin_unlocked", true).apply()
+            if (alreadyUnlocked) {
+                setTotalCoins(totalCoinsState + 500)
+                Toast.makeText(this, "Day 7 Claimed: Exclusive Neon Pink Skin (Already Owned) + 500 Coins!", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "Day 7 Claimed: Exclusive Neon Pink Skin!", Toast.LENGTH_LONG).show()
+            }
+        } else {
+            setTotalCoins(totalCoinsState + rewardAmount)
+            Toast.makeText(this, "Day $dailyStreakDayState Claimed: $rewardAmount Coins!", Toast.LENGTH_SHORT).show()
+        }
+
+        val nextStreakDay = if (dailyStreakDayState >= 7) 1 else dailyStreakDayState + 1
+        dailyStreakDayState = nextStreakDay
+        lastRewardClaimTimeState = now
+
+        prefs.edit()
+            .putInt("daily_streak_day", nextStreakDay)
+            .putLong("last_reward_claim_time", now)
+            .apply()
+
+        showDailyRewardsPopup = false
+        AuthManager.syncProfileToFirestore(this)
+    }
+
+    fun checkAchievements() {
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        val completed = prefs.getStringSet("completed_achievements", emptySet())?.toMutableSet() ?: mutableSetOf()
+        
+        val totalKills = prefs.getInt("total_kills_stat", 0)
+        val highestLevel = prefs.getInt("highest_unlocked_level", 1)
+        val totalCoins = prefs.getInt("total_coins", 0)
+
+        // Achievement 1: Destroy 100 Enemies
+        if (totalKills >= 100 && !completed.contains("kills_100")) {
+            completed.add("kills_100")
+            awardAchievement("kills_100", "DEVASTATOR I", "Destroyed 100 enemy ships!", 500)
+        }
+        // Achievement 2: Destroy 500 Enemies
+        if (totalKills >= 500 && !completed.contains("kills_500")) {
+            completed.add("kills_500")
+            awardAchievement("kills_500", "DEVASTATOR II", "Destroyed 500 enemy ships!", 1000)
+        }
+        // Achievement 3: Destroy 1000 Enemies
+        if (totalKills >= 1000 && !completed.contains("kills_1000")) {
+            completed.add("kills_1000")
+            awardAchievement("kills_1000", "COSMIC CONQUEROR", "Destroyed 1000 enemy ships!", 2500)
+        }
+        // Achievement 4: Reach Level 10
+        if (highestLevel >= 10 && !completed.contains("level_10")) {
+            completed.add("level_10")
+            awardAchievement("level_10", "SECTOR COMMANDER", "Reached Sector 10!", 300)
+        }
+        // Achievement 5: Reach Level 25
+        if (highestLevel >= 25 && !completed.contains("level_25")) {
+            completed.add("level_25")
+            awardAchievement("level_25", "GALACTIC SENTINEL", "Reached Sector 25!", 800)
+        }
+        // Achievement 6: Reach Level 50
+        if (highestLevel >= 50 && !completed.contains("level_50")) {
+            completed.add("level_50")
+            awardAchievement("level_50", "OMEGA COMMANDER", "Reached Sector 50!", 2000)
+        }
+        // Achievement 7: Collect 10,000 Coins
+        if (totalCoins >= 10000 && !completed.contains("coins_10000")) {
+            completed.add("coins_10000")
+            awardAchievement("coins_10000", "TREASURE HUNTER", "Amassed 10,000 total stellar credits!", 1000)
+        }
+        // Achievement 8: Unlock Every Spaceship (8 spaceships)
+        if (ownedShipsState.size >= 8 && !completed.contains("unlock_all_ships")) {
+            completed.add("unlock_all_ships")
+            isLegendarySkinUnlockedState = true
+            prefs.edit().putBoolean("legendary_skin_unlocked", true).apply()
+            awardAchievement("unlock_all_ships", "LEGENDARY PILOT", "Unlocked every single spaceship! Unlocked Legendary Ship Skin!", 0)
+        }
+
+        prefs.edit().putStringSet("completed_achievements", completed).apply()
+    }
+
+    private fun awardAchievement(id: String, title: String, description: String, coinReward: Int) {
+        setTotalCoins(totalCoinsState + coinReward)
+        activeAchievementPopup = AchievementPopupData(id, title, description, coinReward)
+        webView?.post {
+            webView?.evaluateJavascript("if (window.sound) { window.sound.playPowerUp(); }", null)
+        }
+    }
+
     fun onEnemyDestroyed() {
         totalKillsState += 1
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
         prefs.edit().putInt("total_kills_stat", totalKillsState).apply()
+        checkAchievements()
         AuthManager.syncProfileToFirestore(this)
     }
 
@@ -397,6 +589,22 @@ class MainActivity : ComponentActivity() {
         gamesPlayedState = prefs.getInt("games_played_stat", 0)
         totalKillsState = prefs.getInt("total_kills_stat", 0)
 
+        // Load stat upgrades
+        damageUpgradeLevelState = prefs.getInt("upgrade_damage_level", 1)
+        fireRateUpgradeLevelState = prefs.getInt("upgrade_fire_rate", 1)
+        shieldUpgradeLevelState = prefs.getInt("upgrade_shield_level", 1)
+        speedUpgradeLevelState = prefs.getInt("upgrade_speed_level", 1)
+
+        // Load daily rewards state
+        dailyStreakDayState = prefs.getInt("daily_streak_day", 1)
+        lastRewardClaimTimeState = prefs.getLong("last_reward_claim_time", 0L)
+
+        // Load custom skins state
+        isExclusiveSkinUnlockedState = prefs.getBoolean("exclusive_skin_unlocked", false)
+        isLegendarySkinUnlockedState = prefs.getBoolean("legendary_skin_unlocked", false)
+        isExclusiveSkinEnabledState = prefs.getBoolean("exclusive_skin_enabled", false)
+        isLegendarySkinEnabledState = prefs.getBoolean("legendary_skin_enabled", false)
+
         // Check if custom player profile is created
         val uid = prefs.getString("player_uid", null)
         val name = prefs.getString("player_name", null)
@@ -405,7 +613,36 @@ class MainActivity : ComponentActivity() {
         } else {
             showAuthWelcomeScreen = false
             AuthManager.init(this)
-            AuthManager.syncProfileToFirestore(this)
+            
+            // Execute Cloud Restore & Merge
+            AuthManager.restoreProfileFromFirestore(this, uid) { success ->
+                damageUpgradeLevelState = prefs.getInt("upgrade_damage_level", damageUpgradeLevelState)
+                fireRateUpgradeLevelState = prefs.getInt("upgrade_fire_rate", fireRateUpgradeLevelState)
+                shieldUpgradeLevelState = prefs.getInt("upgrade_shield_level", shieldUpgradeLevelState)
+                speedUpgradeLevelState = prefs.getInt("upgrade_speed_level", speedUpgradeLevelState)
+
+                dailyStreakDayState = prefs.getInt("daily_streak_day", dailyStreakDayState)
+                lastRewardClaimTimeState = prefs.getLong("last_reward_claim_time", lastRewardClaimTimeState)
+
+                isExclusiveSkinUnlockedState = prefs.getBoolean("exclusive_skin_unlocked", isExclusiveSkinUnlockedState)
+                isLegendarySkinUnlockedState = prefs.getBoolean("legendary_skin_unlocked", isLegendarySkinUnlockedState)
+                isExclusiveSkinEnabledState = prefs.getBoolean("exclusive_skin_enabled", isExclusiveSkinEnabledState)
+                isLegendarySkinEnabledState = prefs.getBoolean("legendary_skin_enabled", isLegendarySkinEnabledState)
+
+                highestLevelState = prefs.getInt("highest_unlocked_level", highestLevelState)
+                totalCoinsState = prefs.getInt("total_coins", totalCoinsState)
+                totalKillsState = prefs.getInt("total_kills_stat", totalKillsState)
+                gamesPlayedState = prefs.getInt("games_played_stat", gamesPlayedState)
+                
+                val eqShip = prefs.getString("equipped_ship_id", equippedShipIdState) ?: "falcon"
+                equippedShipIdState = eqShip
+
+                // Perform checks
+                checkAchievements()
+                checkDailyRewards()
+
+                AuthManager.syncProfileToFirestore(this)
+            }
         }
 
         // Hide Android System Bars (Status and Navigation) to provide true immersive arcade view
@@ -516,6 +753,7 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onLaunchMission = {
                                         isPaused = false
+                                        continuedThisGame = false
                                         currentScreen = GameScreen.PLAYING
                                         webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
                                     },
@@ -568,7 +806,19 @@ class MainActivity : ComponentActivity() {
                                         }
                                         showProfileDialog = true
                                     },
-                                    playerRank = playerRankState
+                                    playerRank = playerRankState,
+                                    onUpgradeClick = {
+                                        playClickSound()
+                                        showUpgradeDialog = true
+                                    },
+                                    onDailyRewardsClick = {
+                                        playClickSound()
+                                        showDailyRewardsPopup = true
+                                    },
+                                    onAchievementsClick = {
+                                        playClickSound()
+                                        showAchievementsDialog = true
+                                    }
                                 )
                             }
                             GameScreen.LEADERBOARD -> {
@@ -590,8 +840,20 @@ class MainActivity : ComponentActivity() {
                                     kills = finalKills,
                                     isNewHighScore = isNewHighScore,
                                     topScores = leaderboardList,
+                                    continuedThisGame = continuedThisGame,
+                                    onContinueClick = {
+                                        playClickSound()
+                                        adRewardAction = {
+                                            continuedThisGame = true
+                                            currentScreen = GameScreen.PLAYING
+                                            webView?.evaluateJavascript("window.continueGameAfterAd()", null)
+                                        }
+                                        adCountdownSeconds = 5
+                                        showAdSimulator = true
+                                    },
                                     onDeployAgain = {
                                         isPaused = false
+                                        continuedThisGame = false
                                         currentScreen = GameScreen.PLAYING
                                         webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
                                     },
@@ -611,12 +873,14 @@ class MainActivity : ComponentActivity() {
                                         if (selectedLevel < 50) {
                                             selectedLevel += 1
                                             isPaused = false
+                                            continuedThisGame = false
                                             currentScreen = GameScreen.PLAYING
                                             webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
                                         }
                                     },
                                     onReplay = {
                                         isPaused = false
+                                        continuedThisGame = false
                                         currentScreen = GameScreen.PLAYING
                                         webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
                                     },
@@ -752,6 +1016,173 @@ class MainActivity : ComponentActivity() {
                                     showProfileDialog = false
                                 },
                                 playerRank = playerRankState
+                            )
+                        }
+
+                        // Daily Rewards Dialog
+                        if (showDailyRewardsPopup) {
+                            DailyRewardsDialog(
+                                currentStreakDay = dailyStreakDayState,
+                                lastClaimTime = lastRewardClaimTimeState,
+                                onClaim = {
+                                    playClickSound()
+                                    claimDailyReward()
+                                },
+                                onClose = {
+                                    playClickSound()
+                                    showDailyRewardsPopup = false
+                                }
+                            )
+                        }
+
+                        // Upgrade Dialog
+                        if (showUpgradeDialog) {
+                            UpgradeDialog(
+                                currentCoins = totalCoinsState,
+                                damageLvl = damageUpgradeLevelState,
+                                fireRateLvl = fireRateUpgradeLevelState,
+                                shieldLvl = shieldUpgradeLevelState,
+                                speedLvl = speedUpgradeLevelState,
+                                onUpgrade = { statName ->
+                                    val multiplier = when (statName) {
+                                        "damage" -> 100
+                                        "fire_rate" -> 120
+                                        "shield" -> 150
+                                        "speed" -> 100
+                                        else -> 100
+                                    }
+                                    val currentLvl = when (statName) {
+                                        "damage" -> damageUpgradeLevelState
+                                        "fire_rate" -> fireRateUpgradeLevelState
+                                        "shield" -> shieldUpgradeLevelState
+                                        "speed" -> speedUpgradeLevelState
+                                        else -> 1
+                                    }
+                                    val cost = getUpgradeCostForLevel(currentLvl)
+                                    if (currentLvl >= 10) {
+                                        Toast.makeText(this@MainActivity, "Stat already at MAX level!", Toast.LENGTH_SHORT).show()
+                                    } else if (totalCoinsState < cost) {
+                                        Toast.makeText(this@MainActivity, "Insufficient coins!", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        playClickSound()
+                                        setTotalCoins(totalCoinsState - cost)
+                                        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+                                        when (statName) {
+                                            "damage" -> {
+                                                damageUpgradeLevelState += 1
+                                                prefs.edit().putInt("upgrade_damage_level", damageUpgradeLevelState).apply()
+                                            }
+                                            "fire_rate" -> {
+                                                fireRateUpgradeLevelState += 1
+                                                prefs.edit().putInt("upgrade_fire_rate", fireRateUpgradeLevelState).apply()
+                                            }
+                                            "shield" -> {
+                                                shieldUpgradeLevelState += 1
+                                                prefs.edit().putInt("upgrade_shield_level", shieldUpgradeLevelState).apply()
+                                            }
+                                            "speed" -> {
+                                                speedUpgradeLevelState += 1
+                                                prefs.edit().putInt("upgrade_speed_level", speedUpgradeLevelState).apply()
+                                            }
+                                        }
+                                        // Immediately notify HTML5 game loop
+                                        webView?.evaluateJavascript("window.syncEquippedShip()", null)
+                                        AuthManager.syncProfileToFirestore(this@MainActivity)
+                                        Toast.makeText(this@MainActivity, "Ship systems upgraded!", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                isExclusiveUnlocked = isExclusiveSkinUnlockedState,
+                                isLegendaryUnlocked = isLegendarySkinUnlockedState,
+                                isExclusiveEnabled = isExclusiveSkinEnabledState,
+                                isLegendaryEnabled = isLegendarySkinEnabledState,
+                                onToggleExclusive = { enabled ->
+                                    playClickSound()
+                                    isExclusiveSkinEnabledState = enabled
+                                    if (enabled) {
+                                        isLegendarySkinEnabledState = false
+                                    }
+                                    val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+                                    prefs.edit()
+                                        .putBoolean("exclusive_skin_enabled", isExclusiveSkinEnabledState)
+                                        .putBoolean("legendary_skin_enabled", isLegendarySkinEnabledState)
+                                        .apply()
+                                    webView?.evaluateJavascript("window.syncEquippedShip()", null)
+                                    AuthManager.syncProfileToFirestore(this@MainActivity)
+                                },
+                                onToggleLegendary = { enabled ->
+                                    playClickSound()
+                                    isLegendarySkinEnabledState = enabled
+                                    if (enabled) {
+                                        isExclusiveSkinEnabledState = false
+                                    }
+                                    val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+                                    prefs.edit()
+                                        .putBoolean("exclusive_skin_enabled", isExclusiveSkinEnabledState)
+                                        .putBoolean("legendary_skin_enabled", isLegendarySkinEnabledState)
+                                        .apply()
+                                    webView?.evaluateJavascript("window.syncEquippedShip()", null)
+                                    AuthManager.syncProfileToFirestore(this@MainActivity)
+                                },
+                                onWatchAdForCoins = {
+                                    playClickSound()
+                                    adRewardAction = {
+                                        setTotalCoins(totalCoinsState + 200)
+                                        Toast.makeText(this@MainActivity, "Rewarded 200 Stellar Coins!", Toast.LENGTH_SHORT).show()
+                                    }
+                                    adCountdownSeconds = 5
+                                    showAdSimulator = true
+                                },
+                                onClose = {
+                                    playClickSound()
+                                    showUpgradeDialog = false
+                                }
+                            )
+                        }
+
+                        // Achievements Dialog
+                        if (showAchievementsDialog) {
+                            val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+                            val completedSet = prefs.getStringSet("completed_achievements", emptySet()) ?: emptySet()
+                            AchievementsDialog(
+                                completedIds = completedSet,
+                                totalKills = totalKillsState,
+                                highestLevel = highestLevelState,
+                                totalCoins = totalCoinsState,
+                                ownedShipsCount = ownedShipsState.size,
+                                onClose = {
+                                    playClickSound()
+                                    showAchievementsDialog = false
+                                }
+                            )
+                        }
+
+                        // Ads Simulator Overlay
+                        if (showAdSimulator) {
+                            AdSimulator(
+                                secondsRemaining = adCountdownSeconds,
+                                onSecondsTick = {
+                                    if (adCountdownSeconds > 0) {
+                                        adCountdownSeconds -= 1
+                                    }
+                                },
+                                onFinished = {
+                                    playClickSound()
+                                    showAdSimulator = false
+                                    adRewardAction?.invoke()
+                                }
+                            )
+                        }
+
+                        // Animated Achievement Toast/Popup
+                        activeAchievementPopup?.let { popup ->
+                            AchievementAnimatedPopup(
+                                title = popup.title,
+                                description = popup.description,
+                                coinReward = popup.coinReward,
+                                onDismiss = {
+                                    playClickSound()
+                                    activeAchievementPopup = null
+                                }
                             )
                         }
 
@@ -979,6 +1410,21 @@ class GameInterface(
     @android.webkit.JavascriptInterface
     fun getEquippedShipId(): String {
         return activity.getEquippedShipId()
+    }
+
+    @android.webkit.JavascriptInterface
+    fun getUpgradeLevel(statName: String): Int {
+        return activity.getUpgradeLevel(statName)
+    }
+
+    @android.webkit.JavascriptInterface
+    fun isExclusiveSkinEnabled(): Boolean {
+        return activity.isExclusiveSkinEnabled()
+    }
+
+    @android.webkit.JavascriptInterface
+    fun isLegendarySkinEnabled(): Boolean {
+        return activity.isLegendarySkinEnabled()
     }
 
     @android.webkit.JavascriptInterface
@@ -1413,7 +1859,10 @@ fun MainMenuOverlay(
     onCoinShopClick: () -> Unit = {},
     onLeaderboardClick: () -> Unit = {},
     onProfileClick: () -> Unit = {},
-    playerRank: String = "--"
+    playerRank: String = "--",
+    onUpgradeClick: () -> Unit = {},
+    onDailyRewardsClick: () -> Unit = {},
+    onAchievementsClick: () -> Unit = {}
 ) {
     var showLeaderboardPanel by remember { mutableStateOf(false) }
 
@@ -1817,6 +2266,87 @@ fun MainMenuOverlay(
                 }
             }
 
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // STATS, REWARDS, ACHIEVEMENTS ROW
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Upgrades Button
+                Button(
+                    onClick = onUpgradeClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                        .border(BorderStroke(1.dp, Color(0xFF00FF88)), shape = RoundedCornerShape(12.dp))
+                        .background(Color(0x3300FF88), shape = RoundedCornerShape(12.dp))
+                        .testTag("upgrades_button")
+                ) {
+                    Text(
+                        text = "🛠️ UPGRADES",
+                        color = Color(0xFF00FF88),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                // Daily Rewards Button
+                Button(
+                    onClick = onDailyRewardsClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                        .border(BorderStroke(1.dp, Color(0xFFFFD700)), shape = RoundedCornerShape(12.dp))
+                        .background(Color(0x33FFFFD7), shape = RoundedCornerShape(12.dp))
+                        .testTag("daily_rewards_button")
+                ) {
+                    Text(
+                        text = "🎁 DAILY CLAIM",
+                        color = Color(0xFFFFD700),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                // Achievements Button
+                Button(
+                    onClick = onAchievementsClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(38.dp)
+                        .border(BorderStroke(1.dp, Color(0xFFFF00A0)), shape = RoundedCornerShape(12.dp))
+                        .background(Color(0x33FF00A0), shape = RoundedCornerShape(12.dp))
+                        .testTag("achievements_button")
+                ) {
+                    Text(
+                        text = "🏆 ACHIEVES",
+                        color = Color(0xFFFF00A0),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             // 6. CYBERNETIC QUICK COMMAND DOCK (Leaderboard, Sound Toggle, System Settings)
             Row(
                 modifier = Modifier
@@ -2031,6 +2561,8 @@ fun GameOverOverlay(
     kills: Int,
     isNewHighScore: Boolean,
     topScores: List<LeaderboardEntry>,
+    continuedThisGame: Boolean = false,
+    onContinueClick: () -> Unit = {},
     onDeployAgain: () -> Unit,
     onReturnToHangar: () -> Unit
 ) {
@@ -2181,6 +2713,44 @@ fun GameOverOverlay(
             }
 
             Spacer(modifier = Modifier.height(20.dp))
+
+            if (!continuedThisGame) {
+                Button(
+                    onClick = onContinueClick,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.Transparent
+                    ),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .border(
+                            BorderStroke(2.dp, Color(0xFF00FF88)),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .background(
+                            Brush.linearGradient(listOf(Color(0xFF025c2e), Color(0xFF00FF88))),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .testTag("continue_mission_button")
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = "📺 CONTINUE MISSION",
+                            color = Color.Black,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 1.5.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            }
 
             // Deploy Again Button
             Button(
@@ -4034,6 +4604,959 @@ fun BonusCoinsPopup(onCollect: () -> Unit) {
         }
     )
 }
+
+@Composable
+fun DailyRewardsDialog(
+    currentStreakDay: Int,
+    lastClaimTime: Long,
+    onClaim: () -> Unit,
+    onClose: () -> Unit
+) {
+    val days = listOf(
+        Pair(1, "100 🪙"),
+        Pair(2, "150 🪙"),
+        Pair(3, "200 🪙"),
+        Pair(4, "250 🪙"),
+        Pair(5, "300 🪙"),
+        Pair(6, "400 🪙"),
+        Pair(7, "🌸 NEON SKIN")
+    )
+
+    var remainingTimeStr by remember { mutableStateOf("") }
+    var isEligible by remember { mutableStateOf(false) }
+
+    LaunchedEffect(lastClaimTime) {
+        while (true) {
+            val now = System.currentTimeMillis()
+            val elapsed = now - lastClaimTime
+            val target = 24 * 60 * 60 * 1000L
+            if (elapsed >= target) {
+                remainingTimeStr = "Eligible to claim now!"
+                isEligible = true
+            } else {
+                val diff = target - elapsed
+                val hours = (diff / (1000 * 60 * 60)) % 24
+                val minutes = (diff / (1000 * 60)) % 60
+                val seconds = (diff / 1000) % 60
+                remainingTimeStr = String.format("%02d:%02d:%02d until next cargo", hours, minutes, seconds)
+                isEligible = false
+            }
+            kotlinx.coroutines.delay(1000)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = Color(0xFF121216),
+        titleContentColor = Color.White,
+        textContentColor = Color.LightGray,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+            .border(
+                BorderStroke(2.dp, Color(0xFFFFD700)),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .testTag("daily_rewards_dialog"),
+        title = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "🎁 DAILY STELLAR CARGO 🎁",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFFFD700),
+                    textAlign = TextAlign.Center,
+                    fontFamily = FontFamily.Monospace
+                )
+                Text(
+                    text = "Claim daily supplies to upgrade your ship!",
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    fontFamily = FontFamily.SansSerif,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Streak Grid
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Let's create rows of Day cards
+                    // Row 1: Days 1-4
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        for (i in 1..4) {
+                            val dayData = days[i - 1]
+                            val isClaimed = i < currentStreakDay
+                            val isCurrent = i == currentStreakDay
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        when {
+                                            isClaimed -> Color(0x3300FF88)
+                                            isCurrent -> Color(0x44FFFFD7)
+                                            else -> Color(0xFF1E1E24)
+                                        }
+                                    )
+                                    .border(
+                                        width = if (isCurrent) 2.dp else 1.dp,
+                                        color = when {
+                                            isClaimed -> Color(0xFF00FF88)
+                                            isCurrent -> Color(0xFFFFD700)
+                                            else -> Color(0x33FFFFFF)
+                                        },
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .padding(4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = "DAY $i",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isCurrent) Color(0xFFFFD700) else Color.White,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = if (isClaimed) "✅" else dayData.second.split(" ")[0],
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isCurrent) Color(0xFFFFD700) else Color.LightGray
+                                    )
+                                    if (!isClaimed && dayData.second.contains("🪙")) {
+                                        Text(
+                                            text = "COINS",
+                                            fontSize = 7.sp,
+                                            color = Color.Gray,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Row 2: Days 5-7
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        for (i in 5..7) {
+                            val dayData = days[i - 1]
+                            val isClaimed = i < currentStreakDay
+                            val isCurrent = i == currentStreakDay
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(if (i == 7) 2.1f else 1f) // Day 7 is special/wider!
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        when {
+                                            isClaimed -> Color(0x3300FF88)
+                                            isCurrent -> Color(0x44FFFFD7)
+                                            else -> Color(0xFF1E1E24)
+                                        }
+                                    )
+                                    .border(
+                                        width = if (isCurrent) 2.dp else 1.dp,
+                                        color = when {
+                                            isClaimed -> Color(0xFF00FF88)
+                                            isCurrent -> Color(0xFFFFD700)
+                                            i == 7 -> Color(0xFFFF00A0)
+                                            else -> Color(0x33FFFFFF)
+                                        },
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .padding(4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = "DAY $i",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isCurrent) Color(0xFFFFD700) else if (i == 7) Color(0xFFFF00A0) else Color.White,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = if (isClaimed) "✅" else dayData.second,
+                                        fontSize = if (i == 7) 10.sp else 12.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = if (isCurrent) Color(0xFFFFD700) else if (i == 7) Color(0xFFFF00A0) else Color.LightGray,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Text(
+                    text = "Claim consecutive daily rewards. Missing a day resets the supply chain back to Day 1!",
+                    fontSize = 10.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    fontFamily = FontFamily.SansSerif,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onClaim,
+                enabled = isEligible,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFFFD700),
+                    disabledContainerColor = Color(0xFF1E1E24)
+                ),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .testTag("daily_reward_claim_button")
+            ) {
+                Text(
+                    text = if (isEligible) "CLAIM DAY $currentStreakDay CARGO" else "NEXT CARGO: $remainingTimeStr",
+                    color = if (isEligible) Color.Black else Color.Gray,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("daily_reward_close_button")
+            ) {
+                Text(
+                    text = "CLOSE SYSTEM",
+                    color = Color.Gray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+    )
+}
+
+@Composable
+fun UpgradeDialog(
+    currentCoins: Int,
+    damageLvl: Int,
+    fireRateLvl: Int,
+    shieldLvl: Int,
+    speedLvl: Int,
+    onUpgrade: (String) -> Unit,
+    isExclusiveUnlocked: Boolean,
+    isLegendaryUnlocked: Boolean,
+    isExclusiveEnabled: Boolean,
+    isLegendaryEnabled: Boolean,
+    onToggleExclusive: (Boolean) -> Unit,
+    onToggleLegendary: (Boolean) -> Unit,
+    onWatchAdForCoins: () -> Unit,
+    onClose: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = Color(0xFF101014),
+        titleContentColor = Color.White,
+        textContentColor = Color.LightGray,
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp)
+            .border(
+                BorderStroke(2.dp, Color(0xFF00FF88)),
+                shape = RoundedCornerShape(24.dp)
+            )
+            .testTag("upgrades_dialog"),
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "🛠️ SHIP SYSTEMS GARAGE",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF00FF88),
+                    fontFamily = FontFamily.Monospace
+                )
+                
+                Box(
+                    modifier = Modifier
+                        .background(Color(0x33FFFF00), shape = RoundedCornerShape(8.dp))
+                        .border(1.dp, Color(0xFFFFD700), shape = RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "🪙 $currentCoins",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFFD700),
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Section 1: System Upgrades
+                Text(
+                    text = "=== ENGINE & WEAPONS UPGRADES ===",
+                    color = Color.Gray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+
+                val stats = listOf(
+                    Triple("damage", "💥 DAMAGE BOOST", damageLvl),
+                    Triple("fire_rate", "⚡ PLASMA RECHARGE", fireRateLvl),
+                    Triple("shield", "🛡️ DEFLECTOR SHIELD", shieldLvl),
+                    Triple("speed", "🚀 THRUSTER KINETICS", speedLvl)
+                )
+
+                stats.forEach { (statId, label, level) ->
+                    val multiplier = when (statId) {
+                        "damage" -> 100
+                        "fire_rate" -> 120
+                        "shield" -> 150
+                        "speed" -> 100
+                        else -> 100
+                    }
+                    val cost = getUpgradeCostForLevel(level)
+                    val isMax = level >= 10
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFF16161F), shape = RoundedCornerShape(12.dp))
+                            .padding(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "Lv. $level/10",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isMax) Color(0xFFFF00A0) else Color(0xFF00FF88),
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Custom Progress blocks
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            for (b in 1..10) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(6.dp)
+                                        .background(
+                                            when {
+                                                b <= level -> Color(0xFF00FF88)
+                                                else -> Color(0xFF252530)
+                                            },
+                                            shape = RoundedCornerShape(1.dp)
+                                        )
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
+                            onClick = { onUpgrade(statId) },
+                            enabled = !isMax,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isMax) Color(0xFF252530) else Color(0xFF00FF88),
+                                disabledContainerColor = Color(0xFF1E1E24)
+                            ),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(32.dp)
+                                .testTag("upgrade_stat_$statId")
+                        ) {
+                            Text(
+                                text = when {
+                                    isMax -> "FULLY MAXED OUT"
+                                    currentCoins < cost -> "UPGRADE: $cost COINS (NEED COINS)"
+                                    else -> "UPGRADE: $cost COINS"
+                                },
+                                color = if (isMax) Color.Gray else Color.Black,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+
+                // Section 2: Hull Skins
+                Text(
+                    text = "=== HULL COSMETICS / SKINS ===",
+                    color = Color.Gray,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+
+                // Neon Skin Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF16161F), shape = RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "🌸 NEON PINK HULL",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFF00A0),
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "Unlocked via 7-day daily streak.",
+                            fontSize = 9.sp,
+                            color = Color.Gray
+                        )
+                    }
+
+                    if (isExclusiveUnlocked) {
+                        Switch(
+                            checked = isExclusiveEnabled,
+                            onCheckedChange = { onToggleExclusive(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFFFF00A0),
+                                checkedTrackColor = Color(0xFF500030)
+                            ),
+                            modifier = Modifier.testTag("toggle_exclusive_skin")
+                        )
+                    } else {
+                        Text(
+                            text = "🔒 LOCKED",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Gray,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                // Legendary Skin Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF16161F), shape = RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "👑 GOLD LEGENDARY HULL",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFFFD700),
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "Unlocked: Destroy 1000 total enemies.",
+                            fontSize = 9.sp,
+                            color = Color.Gray
+                        )
+                    }
+
+                    if (isLegendaryUnlocked) {
+                        Switch(
+                            checked = isLegendaryEnabled,
+                            onCheckedChange = { onToggleLegendary(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color(0xFFFFD700),
+                                checkedTrackColor = Color(0xFF504000)
+                            ),
+                            modifier = Modifier.testTag("toggle_legendary_skin")
+                        )
+                    } else {
+                        Text(
+                            text = "🔒 LOCKED",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Gray,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                // Section 3: Extra Coins
+                Spacer(modifier = Modifier.height(4.dp))
+                Button(
+                    onClick = onWatchAdForCoins,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .border(BorderStroke(1.5.dp, Color(0xFFFFD700)), shape = RoundedCornerShape(10.dp))
+                        .background(Color(0x22FFFFD7), shape = RoundedCornerShape(10.dp))
+                        .testTag("upgrade_watch_ad_button")
+                ) {
+                    Text(
+                        text = "📺 WATCH ARCADE AD (+200 COINS)",
+                        color = Color(0xFFFFD700),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onClose,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00FF88)),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .testTag("upgrade_close_button")
+            ) {
+                Text(
+                    text = "DISMISS GARAGE",
+                    color = Color.Black,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+    )
+}
+
+@Composable
+fun AchievementsDialog(
+    completedIds: Set<String>,
+    totalKills: Int,
+    highestLevel: Int,
+    totalCoins: Int,
+    ownedShipsCount: Int,
+    onClose: () -> Unit
+) {
+    val achievements = listOf(
+        Pair("kills_100", Triple("🏆 DEVASTATOR I", "Destroyed 100 enemy ships!\nReward: 500 Coins", 100)),
+        Pair("kills_500", Triple("🏆 DEVASTATOR II", "Destroyed 500 enemy ships!\nReward: 1000 Coins", 500)),
+        Pair("kills_1000", Triple("👑 COSMIC CONQUEROR", "Destroyed 1000 enemy ships!\nReward: 2500 Coins", 1000)),
+        Pair("level_10", Triple("🛸 SECTOR COMMANDER", "Reached Sector 10!\nReward: 300 Coins", 10)),
+        Pair("level_25", Triple("🌌 GALACTIC SENTINEL", "Reached Sector 25!\nReward: 800 Coins", 25)),
+        Pair("level_50", Triple("☄️ OMEGA COMMANDER", "Reached Sector 50!\nReward: 2000 Coins", 50)),
+        Pair("coins_10000", Triple("💎 TREASURE HUNTER", "Amassed 10,000 total stellar credits!\nReward: 1000 Coins", 10000)),
+        Pair("unlock_all_ships", Triple("🚀 LEGENDARY PILOT", "Unlocked every single spaceship!\nReward: Legendary Ship Skin", 8))
+    )
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = Color(0xFF0F0F12),
+        titleContentColor = Color.White,
+        textContentColor = Color.LightGray,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp)
+            .border(
+                BorderStroke(2.dp, Color(0xFFFF00A0)),
+                shape = RoundedCornerShape(20.dp)
+            )
+            .testTag("achievements_dialog"),
+        title = {
+            Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "🏆 COSMIC ACHIEVEMENTS",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFFF00A0),
+                    fontFamily = FontFamily.Monospace
+                )
+                Text(
+                    text = "Unlock milestones for extra gold & epic skins!",
+                    fontSize = 10.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    itemsIndexed(achievements) { _, item ->
+                        val id = item.first
+                        val title = item.second.first
+                        val desc = item.second.second
+                        val target = item.second.third
+                        val isCompleted = completedIds.contains(id)
+
+                        val currentProgress = when {
+                            id.startsWith("kills_") -> totalKills
+                            id.startsWith("level_") -> highestLevel
+                            id.startsWith("coins_") -> totalCoins
+                            id == "unlock_all_ships" -> ownedShipsCount
+                            else -> 0
+                        }
+
+                        val progressRatio = (currentProgress.toFloat() / target.toFloat()).coerceIn(0f, 1f)
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF16161F), shape = RoundedCornerShape(10.dp))
+                                .border(
+                                    width = 1.dp,
+                                    color = if (isCompleted) Color(0xFFFF00A0) else Color(0x11FFFFFF),
+                                    shape = RoundedCornerShape(10.dp)
+                                )
+                                .padding(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = title,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isCompleted) Color(0xFFFF00A0) else Color.White,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Text(
+                                    text = desc,
+                                    fontSize = 9.sp,
+                                    color = Color.LightGray,
+                                    modifier = Modifier.padding(top = 2.dp)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                // Small progress bar
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(4.dp)
+                                            .background(Color(0xFF252530), shape = RoundedCornerShape(2.dp))
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth(progressRatio)
+                                                .height(4.dp)
+                                                .background(
+                                                    if (isCompleted) Color(0xFFFF00A0) else Color(0xFF00FF88),
+                                                    shape = RoundedCornerShape(2.dp)
+                                                )
+                                        )
+                                    }
+                                    Text(
+                                        text = "$currentProgress/$target",
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.Gray,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(
+                                        if (isCompleted) Color(0x33FF00A0) else Color(0xFF252530),
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isCompleted) "🏆" else "🔒",
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onClose,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF00A0)),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .testTag("achievements_close_button")
+            ) {
+                Text(
+                    text = "BACK TO COMMAND",
+                    color = Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+    )
+}
+
+@Composable
+fun AdSimulator(
+    secondsRemaining: Int,
+    onSecondsTick: () -> Unit,
+    onFinished: () -> Unit
+) {
+    LaunchedEffect(secondsRemaining) {
+        if (secondsRemaining > 0) {
+            kotlinx.coroutines.delay(1000L)
+            onSecondsTick()
+        } else {
+            onFinished()
+        }
+    }
+
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = {}, // Force watching ad fully!
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xE60A0A0F))
+                .testTag("ad_simulator_overlay"),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .padding(24.dp)
+                    .border(2.dp, Color(0xFFFFD700), shape = RoundedCornerShape(16.dp))
+                    .background(Color(0xFF101014), shape = RoundedCornerShape(16.dp))
+                    .padding(32.dp)
+            ) {
+                Text(
+                    text = "📺 ARCADE TRANSMISSION",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFFFD700),
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "STATION SPONSOR MESSAGE",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Gray,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Fun Retro Loading Indicator/Wheel
+                CircularProgressIndicator(
+                    color = Color(0xFFFFD700),
+                    strokeWidth = 4.dp,
+                    modifier = Modifier.size(48.dp)
+                )
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                Text(
+                    text = "Securing stellar sponsors...",
+                    fontSize = 12.sp,
+                    color = Color.LightGray,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "REWARD IN: $secondsRemaining SECONDS",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF00FF88),
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AchievementAnimatedPopup(
+    title: String,
+    description: String,
+    coinReward: Int,
+    onDismiss: () -> Unit
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF2C1035), Color(0xFF10081C))
+                    )
+                )
+                .border(2.dp, Color(0xFFFF00A0), shape = RoundedCornerShape(16.dp))
+                .padding(20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "🏆 ACHIEVEMENT UNLOCKED! 🏆",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFFF00A0),
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = title,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = description,
+                    fontSize = 11.sp,
+                    color = Color.LightGray,
+                    textAlign = TextAlign.Center
+                )
+
+                Box(
+                    modifier = Modifier
+                        .background(Color(0x33FFFF00), shape = RoundedCornerShape(8.dp))
+                        .border(1.dp, Color(0xFFFFD700), shape = RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = "+$coinReward COINS CREDITED",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFFFFD700),
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF00A0)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(38.dp)
+                        .testTag("achievement_dismiss_button")
+                ) {
+                    Text(
+                        text = "AFFIRMATIVE",
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+    }
+}
+
 
 
 
