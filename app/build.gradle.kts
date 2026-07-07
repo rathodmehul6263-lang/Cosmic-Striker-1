@@ -1,4 +1,24 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.util.Properties
+import java.io.File
+
+fun getSecretProperty(key: String, defaultValue: String): String {
+  val envFile = File(project.rootDir, ".env")
+  if (envFile.exists()) {
+    val props = Properties()
+    envFile.inputStream().use { props.load(it) }
+    val value = props.getProperty(key)
+    if (!value.isNullOrEmpty()) return value
+  }
+  val exampleFile = File(project.rootDir, ".env.example")
+  if (exampleFile.exists()) {
+    val props = Properties()
+    exampleFile.inputStream().use { props.load(it) }
+    val value = props.getProperty(key)
+    if (!value.isNullOrEmpty()) return value
+  }
+  return defaultValue
+}
 
 plugins {
   alias(libs.plugins.android.application)
@@ -21,6 +41,7 @@ android {
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    manifestPlaceholders["admobAppId"] = "ca-app-pub-3940256099942544~3347511713"
   }
 
   signingConfigs {
@@ -39,9 +60,11 @@ android {
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
+      manifestPlaceholders["admobAppId"] = getSecretProperty("ADMOB_APP_ID", "ca-app-pub-3940256099942544~3347511713")
     }
     debug {
       signingConfig = signingConfigs.getByName("debug")
+      manifestPlaceholders["admobAppId"] = "ca-app-pub-3940256099942544~3347511713"
     }
   }
   compileOptions {
@@ -104,6 +127,7 @@ dependencies {
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
   implementation(libs.play.services.auth)
+  implementation(libs.play.services.ads)
   implementation("com.android.billingclient:billing-ktx:7.0.0")
   implementation(libs.facebook.android.sdk)
   // implementation(libs.play.services.location)

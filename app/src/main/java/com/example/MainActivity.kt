@@ -7,6 +7,14 @@ import android.util.Log
 import android.widget.Toast
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.ads.MobileAds
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.LoadAdError
+import com.google.android.gms.ads.rewarded.RewardedAd
+import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback
+import com.google.android.gms.ads.FullScreenContentCallback
+import com.google.android.gms.ads.interstitial.InterstitialAd
+import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import android.os.Build
 import android.os.Bundle
 import android.os.Vibrator
@@ -154,6 +162,161 @@ class MainActivity : ComponentActivity() {
     private var showAdSimulator by mutableStateOf(false)
     private var adRewardAction by mutableStateOf<(() -> Unit)?>(null)
     private var adCountdownSeconds by mutableStateOf(5)
+
+    // AdMob Ads state and load managers
+    private var rewardedAd: RewardedAd? = null
+    private var isRewardedAdLoading = false
+    private var interstitialAd: InterstitialAd? = null
+    private var isInterstitialAdLoading = false
+    private var completedMissionsCount = 0
+
+    private fun getRewardedAdUnitId(): String {
+        return if (BuildConfig.DEBUG) {
+            "ca-app-pub-3940256099942544/5224354917" // Test ID
+        } else {
+            val configId = BuildConfig.ADMOB_REWARDED_AD_UNIT_ID
+            if (configId.isEmpty() || configId == "ca-app-pub-3940256099942544/5224354917") {
+                "ca-app-pub-3940256099942544/5224354917"
+            } else {
+                configId
+            }
+        }
+    }
+
+    private fun getInterstitialAdUnitId(): String {
+        return if (BuildConfig.DEBUG) {
+            "ca-app-pub-3940256099942544/1033173712" // Test ID
+        } else {
+            val configId = BuildConfig.ADMOB_INTERSTITIAL_AD_UNIT_ID
+            if (configId.isEmpty() || configId == "ca-app-pub-3940256099942544/1033173712") {
+                "ca-app-pub-3940256099942544/1033173712"
+            } else {
+                configId
+            }
+        }
+    }
+
+    private fun loadRewardedAd() {
+        if (isRewardedAdLoading || rewardedAd != null) return
+        isRewardedAdLoading = true
+        val adRequest = AdRequest.Builder().build()
+        runOnUiThread {
+            RewardedAd.load(this, getRewardedAdUnitId(), adRequest, object : RewardedAdLoadCallback() {
+                override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                    Log.e("CosmicStrikerAdMob", "Rewarded ad failed to load: ${loadAdError.message}")
+                    rewardedAd = null
+                    isRewardedAdLoading = false
+                    // Retry loading after a delay of 15 seconds
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        loadRewardedAd()
+                    }, 15000)
+                }
+
+                override fun onAdLoaded(ad: RewardedAd) {
+                    Log.d("CosmicStrikerAdMob", "Rewarded ad loaded successfully.")
+                    rewardedAd = ad
+                    isRewardedAdLoading = false
+                }
+            })
+        }
+    }
+
+    private fun showRewardedAd(onRewardEarned: () -> Unit) {
+        val ad = rewardedAd
+        if (ad != null) {
+            var rewardEarned = false
+            ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+                override fun onAdDismissedFullScreenContent() {
+                    Log.d("CosmicStrikerAdMob", "Rewarded ad dismissed.")
+                    rewardedAd = null
+                    // Preload the next rewarded ad automatically after one is shown
+                    loadRewardedAd()
+                    if (rewardEarned) {
+                        onRewardEarned()
+                    } else {
+                        Toast.makeText(this@MainActivity, "Ad skipped. No reward earned.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                override fun onAdFailedToShowFullScreenContent(adError: com.google.android.gms.ads.AdError) {
+                    Log.e("CosmicStrikerAdMob", "Rewarded ad failed to show: ${adError.message}")
+                    rewardedAd = null
+                    // Preload next
+                    loadRewardedAd()
+                    // Fallback to simulator
+                    showFallbackAdSimulator(onRewardEarned)
+                }
+            }
+            
+            ad.show(this) { rewardItem ->
+                Log.d("CosmicStrikerAdMob", "User earned reward: ${rewardItem.amount} ${rewardItem.type}")
+                rewardEarned = true
+            }
+        } else {
+            // Fallback to simulator
+            showFallbackAdSimulator(onRewardEarned)
+            loadRewardedAd()
+        }
+    }
+
+    private fun showFallbackAdSimulator(onRewardEarned: () -> Unit) {
+        adRewardAction = onRewardEarned
+        adCountdownSeconds = 5
+        showAdSimulator = true
+    }
+
+    private fun loadInterstitialAd() {
+        if (isInterstitialAdLoading || interstitialAd != null) return
+        isInterstitialAdLoading = true
+        val adRequest = AdRequest.Builder().build()
+        runOnUiThread {
+            InterstitialAd.load(this, getInterstitialAdUnitId(), adRequest, object : InterstitialAdLoadCallback() {
+                override fun onAdFailedToLoad(loadAdError: LoadAdError) {
+                    Log.e("CosmicStrikerAdMob", "Interstitial ad failed to load: ${loadAdError.message}")
+                    interstitialAd = null
+                    isInterstitialAdLoading = false
+                    // Retry loading after a delay of 15 seconds
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        loadInterstitialAd()
+                    }, 15000)
+                }
+
+                override fun onAdLoaded(ad: InterstitialAd) {
+                    Log.d("CosmicStrikerAdMob", "Interstitial ad loaded successfully.")
+                    interstitialAd = ad
+                    isInterstitialAdLoading = false
+                }
+            })
+        }
+    }
+
+    private fun showInterstitialAd(onDismissed: () -> Unit = {}) {
+        val ad = interstitialAd
+        if (ad != null) {
+            ad.fullScreenContentCallback = object : FullScreenContentCallback() {
+                override fun onAdDismissedFullScreenContent() {
+                    Log.d("CosmicStrikerAdMob", "Interstitial ad dismissed.")
+                    interstitialAd = null
+                    // Reload the next interstitial automatically after it closes
+                    loadInterstitialAd()
+                    onDismissed()
+                }
+
+                override fun onAdFailedToShowFullScreenContent(adError: com.google.android.gms.ads.AdError) {
+                    Log.e("CosmicStrikerAdMob", "Interstitial ad failed to show: ${adError.message}")
+                    interstitialAd = null
+                    // Preload next
+                    loadInterstitialAd()
+                    onDismissed()
+                }
+            }
+            ad.show(this)
+        } else {
+            Log.d("CosmicStrikerAdMob", "Interstitial ad not ready.")
+            loadInterstitialAd()
+            onDismissed()
+        }
+    }
     private var continuedThisGame by mutableStateOf(false)
 
     fun onLevelCompleted(coinsEarned: Int, totalCoins: Int) {
@@ -170,6 +333,12 @@ class MainActivity : ComponentActivity() {
             setHighestLevel(nextLvl)
         }
         currentScreen = GameScreen.LEVEL_COMPLETE
+
+        completedMissionsCount += 1
+        if (completedMissionsCount >= 3) {
+            completedMissionsCount = 0
+            showInterstitialAd()
+        }
     }
 
     fun isSectorCompletedAndRewarded(level: Int): Boolean {
@@ -566,6 +735,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Initialize AdMob Mobile Ads SDK
+        MobileAds.initialize(this) { initializationStatus ->
+            Log.d("CosmicStrikerAdMob", "AdMob initialized")
+            loadRewardedAd()
+            loadInterstitialAd()
+        }
+
         leaderboardManager = LeaderboardManager(this)
         leaderboardList = leaderboardManager.getTopScores()
 
@@ -847,12 +1023,10 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onEarnCoinsClick = {
                                         playClickSound()
-                                        adRewardAction = {
+                                        showRewardedAd {
                                             setTotalCoins(totalCoinsState + 200)
                                             Toast.makeText(this@MainActivity, "+200 Coins Added!", Toast.LENGTH_LONG).show()
                                         }
-                                        adCountdownSeconds = 5
-                                        showAdSimulator = true
                                     }
                                 )
                             }
@@ -878,13 +1052,11 @@ class MainActivity : ComponentActivity() {
                                     continuedThisGame = continuedThisGame,
                                     onContinueClick = {
                                         playClickSound()
-                                        adRewardAction = {
+                                        showRewardedAd {
                                             continuedThisGame = true
                                             currentScreen = GameScreen.PLAYING
                                             webView?.evaluateJavascript("window.continueGameAfterAd()", null)
                                         }
-                                        adCountdownSeconds = 5
-                                        showAdSimulator = true
                                     },
                                     onDeployAgain = {
                                         isPaused = false
@@ -1163,12 +1335,10 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onWatchAdForCoins = {
                                     playClickSound()
-                                    adRewardAction = {
+                                    showRewardedAd {
                                         setTotalCoins(totalCoinsState + 200)
                                         Toast.makeText(this@MainActivity, "Rewarded 200 Stellar Coins!", Toast.LENGTH_SHORT).show()
                                     }
-                                    adCountdownSeconds = 5
-                                    showAdSimulator = true
                                 },
                                 onClose = {
                                     playClickSound()
@@ -1308,6 +1478,7 @@ class MainActivity : ComponentActivity() {
                                 submitScoreToOnlineLeaderboard(score, kills)
                             }
                             currentScreen = GameScreen.GAMEOVER
+                            showInterstitialAd()
                         },
                         onGameStarted = {
                             isScoreSavedForCurrentGame = false
