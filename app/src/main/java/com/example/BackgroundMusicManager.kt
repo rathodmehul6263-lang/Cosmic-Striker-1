@@ -36,12 +36,51 @@ class BackgroundMusicManager(private val context: Context) {
         }
     }
 
+    @Suppress("DEPRECATION")
     private fun requestAudioFocus(): Boolean {
-        return true
+        return try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val focusRequest = android.media.AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_GAME)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                            .build()
+                    )
+                    .setAcceptsDelayedFocusGain(true)
+                    .setOnAudioFocusChangeListener(focusChangeListener)
+                    .build()
+                this.focusRequest = focusRequest
+                val result = audioManager.requestAudioFocus(focusRequest)
+                result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            } else {
+                val result = audioManager.requestAudioFocus(
+                    focusChangeListener,
+                    AudioManager.STREAM_MUSIC,
+                    AudioManager.AUDIOFOCUS_GAIN
+                )
+                result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+            }
+        } catch (e: Exception) {
+            Log.e("BackgroundMusicManager", "Error requesting audio focus", e)
+            true
+        }
     }
 
+    @Suppress("DEPRECATION")
     private fun abandonAudioFocus() {
-        // No-op to avoid AppOps CONTROL_AUDIO check
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                (focusRequest as? android.media.AudioFocusRequest)?.let {
+                    audioManager.abandonAudioFocusRequest(it)
+                }
+                focusRequest = null
+            } else {
+                audioManager.abandonAudioFocus(focusChangeListener)
+            }
+        } catch (e: Exception) {
+            Log.e("BackgroundMusicManager", "Error abandoning audio focus", e)
+        }
     }
 
     private val hasAudioOutput: Boolean by lazy {
