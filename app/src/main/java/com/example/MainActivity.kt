@@ -166,6 +166,28 @@ class MainActivity : ComponentActivity() {
         currentScreen = GameScreen.LEVEL_COMPLETE
     }
 
+    fun isSectorCompletedAndRewarded(level: Int): Boolean {
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        val rewarded = prefs.getStringSet("rewarded_sectors_completion", emptySet()) ?: emptySet()
+        return rewarded.contains(level.toString())
+    }
+
+    fun markSectorRewarded(level: Int) {
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        val rewarded = (prefs.getStringSet("rewarded_sectors_completion", emptySet()) ?: emptySet()).toMutableSet()
+        rewarded.add(level.toString())
+        prefs.edit().putStringSet("rewarded_sectors_completion", rewarded).apply()
+    }
+
+    fun awardSectorCompletionReward(level: Int) {
+        if (!isSectorCompletedAndRewarded(level)) {
+            markSectorRewarded(level)
+            val newTotal = totalCoinsState + 50
+            setTotalCoins(newTotal)
+            Toast.makeText(this@MainActivity, "Sector Complete! +50 Coins", Toast.LENGTH_LONG).show()
+        }
+    }
+
     fun getHighestLevel(): Int = highestLevelState
     fun setHighestLevel(level: Int) {
         highestLevelState = level
@@ -731,6 +753,9 @@ class MainActivity : ComponentActivity() {
                                     webView?.evaluateJavascript("window.pauseGame()", null)
                                 }
                             } else if (currentScreen == GameScreen.GAMEOVER || currentScreen == GameScreen.LEVEL_COMPLETE || currentScreen == GameScreen.LEADERBOARD) {
+                                if (currentScreen == GameScreen.LEVEL_COMPLETE) {
+                                    awardSectorCompletionReward(selectedLevel)
+                                }
                                 currentScreen = GameScreen.MENU
                                 isPaused = false
                                 webView?.evaluateJavascript("window.showStartScreen()", null)
@@ -879,6 +904,7 @@ class MainActivity : ComponentActivity() {
                                     coinsEarned = coinsEarnedState,
                                     totalCoins = totalCoinsState,
                                     onNextLevel = {
+                                        awardSectorCompletionReward(selectedLevel)
                                         if (selectedLevel < 50) {
                                             selectedLevel += 1
                                             isPaused = false
@@ -888,12 +914,14 @@ class MainActivity : ComponentActivity() {
                                         }
                                     },
                                     onReplay = {
+                                        awardSectorCompletionReward(selectedLevel)
                                         isPaused = false
                                         continuedThisGame = false
                                         currentScreen = GameScreen.PLAYING
                                         webView?.evaluateJavascript("window.startGame($selectedLevel)", null)
                                     },
                                     onReturnToHangar = {
+                                        awardSectorCompletionReward(selectedLevel)
                                         isPaused = false
                                         currentScreen = GameScreen.MENU
                                         webView?.evaluateJavascript("window.showStartScreen()", null)
@@ -1183,7 +1211,7 @@ class MainActivity : ComponentActivity() {
                                     playClickSound()
                                     showAdSimulator = false
                                     adRewardAction = null
-                                    Toast.makeText(this@MainActivity, "Reward not earned. Watch the full ad.", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(this@MainActivity, "Watch the full ad to earn coins.", Toast.LENGTH_LONG).show()
                                 }
                             )
                         }
@@ -1967,45 +1995,7 @@ fun MainMenuOverlay(
                     }
                 }
 
-                // Earn Coins Button (Neon style)
-                val earnCoinsPulse = rememberInfiniteTransition(label = "EarnCoinsPulse")
-                val earnCoinsScale by earnCoinsPulse.animateFloat(
-                    initialValue = 0.96f,
-                    targetValue = 1.04f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(1200, easing = FastOutSlowInEasing),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "EarnCoinsScale"
-                )
 
-                Button(
-                    onClick = onEarnCoinsClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .graphicsLayer {
-                            scaleX = earnCoinsScale
-                            scaleY = earnCoinsScale
-                        }
-                        .height(34.dp)
-                        .border(
-                            BorderStroke(1.2.dp, Brush.linearGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))),
-                            shape = RoundedCornerShape(14.dp)
-                        )
-                        .background(Color(0xFFFFD700).copy(alpha = 0.12f), shape = RoundedCornerShape(14.dp))
-                        .testTag("earn_coins_button")
-                ) {
-                    Text(
-                        text = "🪙 EARN COINS",
-                        color = Color(0xFFFFD700),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 0.5.sp
-                    )
-                }
 
                 // Right: Coins Indicator
                 Row(
@@ -2122,6 +2112,60 @@ fun MainMenuOverlay(
                     .fillMaxWidth()
                     .padding(bottom = 4.dp)
             ) {
+                // Earn Coins Button (Neon style)
+                val earnCoinsPulse = rememberInfiniteTransition(label = "EarnCoinsPulse")
+                val earnCoinsScale by earnCoinsPulse.animateFloat(
+                    initialValue = 0.96f,
+                    targetValue = 1.04f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1200, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "EarnCoinsScale"
+                )
+
+                Button(
+                    onClick = onEarnCoinsClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .graphicsLayer {
+                            scaleX = earnCoinsScale
+                            scaleY = earnCoinsScale
+                        }
+                        .height(42.dp)
+                        .border(
+                            BorderStroke(
+                                1.5.dp, 
+                                Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFFFFD700).copy(alpha = 0.15f),
+                                    Color(0xFFFFA500).copy(alpha = 0.15f)
+                                )
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .testTag("earn_coins_button")
+                ) {
+                    Text(
+                        text = "📺 EARN COINS",
+                        color = Color(0xFFFFD700),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Black,
+                        fontFamily = FontFamily.SansSerif,
+                        letterSpacing = 1.5.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
                 // Sleek cybernetic section header (transparent glassmorphism with neon cyan/purple border and subtle glow)
                 Box(
                     modifier = Modifier
