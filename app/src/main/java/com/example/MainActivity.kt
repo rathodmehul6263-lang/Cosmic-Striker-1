@@ -157,8 +157,14 @@ class MainActivity : ComponentActivity() {
     private var continuedThisGame by mutableStateOf(false)
 
     fun onLevelCompleted(coinsEarned: Int, totalCoins: Int) {
-        coinsEarnedState = coinsEarned
-        setTotalCoins(totalCoins)
+        val rewardAmount = 100
+        coinsEarnedState = rewardAmount
+        val previousTotal = totalCoinsState
+        val newTotal = previousTotal + rewardAmount
+        setTotalCoins(newTotal)
+        
+        Toast.makeText(this@MainActivity, "Sector Complete! +$rewardAmount Coins", Toast.LENGTH_LONG).show()
+
         val nextLvl = selectedLevel + 1
         if (nextLvl > highestLevelState && nextLvl <= 50) {
             setHighestLevel(nextLvl)
@@ -180,12 +186,7 @@ class MainActivity : ComponentActivity() {
     }
 
     fun awardSectorCompletionReward(level: Int) {
-        if (!isSectorCompletedAndRewarded(level)) {
-            markSectorRewarded(level)
-            val newTotal = totalCoinsState + 50
-            setTotalCoins(newTotal)
-            Toast.makeText(this@MainActivity, "Sector Complete! +50 Coins", Toast.LENGTH_LONG).show()
-        }
+        // Handled immediately inside onLevelCompleted to avoid any double rewarding or delays
     }
 
     fun getHighestLevel(): Int = highestLevelState
@@ -2145,9 +2146,9 @@ fun MainMenuOverlay(
                                 shape = RoundedCornerShape(12.dp)
                             )
                             .graphicsLayer {
-                                scaleX = 1.02f
-                                scaleY = 1.08f
-                                alpha = 0.25f
+                                scaleX = 1.04f
+                                scaleY = 1.12f
+                                alpha = 0.35f
                             }
                     )
                     Button(
@@ -2158,14 +2159,14 @@ fun MainMenuOverlay(
                         modifier = Modifier
                             .fillMaxSize()
                             .border(
-                                BorderStroke(1.5.dp, Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))),
+                                BorderStroke(2.dp, Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))),
                                 shape = RoundedCornerShape(12.dp)
                             )
                             .background(
                                 Brush.horizontalGradient(
                                     listOf(
-                                        Color(0xFFFFD700).copy(alpha = 0.15f),
-                                        Color(0xFFFFA500).copy(alpha = 0.15f)
+                                        Color(0xFF03050C),
+                                        Color(0xFF090C1B)
                                     )
                                 ),
                                 shape = RoundedCornerShape(12.dp)
