@@ -818,6 +818,15 @@ class MainActivity : ComponentActivity() {
                                     onAchievementsClick = {
                                         playClickSound()
                                         showAchievementsDialog = true
+                                    },
+                                    onEarnCoinsClick = {
+                                        playClickSound()
+                                        adRewardAction = {
+                                            setTotalCoins(totalCoinsState + 200)
+                                            Toast.makeText(this@MainActivity, "+200 Coins Added!", Toast.LENGTH_LONG).show()
+                                        }
+                                        adCountdownSeconds = 5
+                                        showAdSimulator = true
                                     }
                                 )
                             }
@@ -1169,6 +1178,12 @@ class MainActivity : ComponentActivity() {
                                     playClickSound()
                                     showAdSimulator = false
                                     adRewardAction?.invoke()
+                                },
+                                onSkip = {
+                                    playClickSound()
+                                    showAdSimulator = false
+                                    adRewardAction = null
+                                    Toast.makeText(this@MainActivity, "Reward not earned. Watch the full ad.", Toast.LENGTH_LONG).show()
                                 }
                             )
                         }
@@ -1862,7 +1877,8 @@ fun MainMenuOverlay(
     playerRank: String = "--",
     onUpgradeClick: () -> Unit = {},
     onDailyRewardsClick: () -> Unit = {},
-    onAchievementsClick: () -> Unit = {}
+    onAchievementsClick: () -> Unit = {},
+    onEarnCoinsClick: () -> Unit = {}
 ) {
     var showLeaderboardPanel by remember { mutableStateOf(false) }
 
@@ -1949,6 +1965,46 @@ fun MainMenuOverlay(
                             letterSpacing = 1.sp
                         )
                     }
+                }
+
+                // Earn Coins Button (Neon style)
+                val earnCoinsPulse = rememberInfiniteTransition(label = "EarnCoinsPulse")
+                val earnCoinsScale by earnCoinsPulse.animateFloat(
+                    initialValue = 0.96f,
+                    targetValue = 1.04f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1200, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "EarnCoinsScale"
+                )
+
+                Button(
+                    onClick = onEarnCoinsClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier
+                        .graphicsLayer {
+                            scaleX = earnCoinsScale
+                            scaleY = earnCoinsScale
+                        }
+                        .height(34.dp)
+                        .border(
+                            BorderStroke(1.2.dp, Brush.linearGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))),
+                            shape = RoundedCornerShape(14.dp)
+                        )
+                        .background(Color(0xFFFFD700).copy(alpha = 0.12f), shape = RoundedCornerShape(14.dp))
+                        .testTag("earn_coins_button")
+                ) {
+                    Text(
+                        text = "🪙 EARN COINS",
+                        color = Color(0xFFFFD700),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.5.sp
+                    )
                 }
 
                 // Right: Coins Indicator
@@ -5374,7 +5430,8 @@ fun AchievementsDialog(
 fun AdSimulator(
     secondsRemaining: Int,
     onSecondsTick: () -> Unit,
-    onFinished: () -> Unit
+    onFinished: () -> Unit,
+    onSkip: () -> Unit
 ) {
     LaunchedEffect(secondsRemaining) {
         if (secondsRemaining > 0) {
@@ -5386,7 +5443,7 @@ fun AdSimulator(
     }
 
     androidx.compose.ui.window.Dialog(
-        onDismissRequest = {}, // Force watching ad fully!
+        onDismissRequest = {}, // Force watching ad fully unless explicitly skipped
         properties = DialogProperties(
             dismissOnBackPress = false,
             dismissOnClickOutside = false
@@ -5456,6 +5513,26 @@ fun AdSimulator(
                     fontFamily = FontFamily.Monospace,
                     textAlign = TextAlign.Center
                 )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Button(
+                    onClick = onSkip,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                    border = BorderStroke(1.dp, Color(0xFFFF2200)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .height(32.dp)
+                        .testTag("skip_ad_button")
+                ) {
+                    Text(
+                        text = "⏩ SKIP AD",
+                        color = Color(0xFFFF2200),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
             }
         }
     }

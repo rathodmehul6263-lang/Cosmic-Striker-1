@@ -1011,25 +1011,6 @@
         let enemyBullets = [];
         let enemies = [];
         let powerups = [];
-        let coinsList = [];
-
-        function spawnCoinsList(x, y, count) {
-            for (let i = 0; i < count; i++) {
-                const angle = Math.random() * Math.PI * 2;
-                const speed = Math.random() * 5 + 3;
-                coinsList.push({
-                    active: true,
-                    x: x,
-                    y: y,
-                    vx: Math.cos(angle) * speed,
-                    vy: Math.sin(angle) * speed,
-                    size: 6,
-                    pulse: Math.random() * Math.PI,
-                    timer: 0,
-                    state: 'scatter'
-                });
-            }
-        }
 
         // Player Model
         const player = {
@@ -1205,88 +1186,7 @@
             ctx.globalAlpha = 1.0;
         }
 
-        function updateCoinsList(dt) {
-            const modifier = dt / 16.66;
-            for (let i = 0; i < coinsList.length; i++) {
-                const coin = coinsList[i];
-                if (!coin.active) continue;
 
-                coin.timer += dt;
-                coin.pulse += 0.1 * modifier;
-
-                if (coin.state === 'scatter') {
-                    coin.x += coin.vx * modifier;
-                    coin.y += coin.vy * modifier;
-                    coin.vx *= Math.pow(0.92, modifier);
-                    coin.vy *= Math.pow(0.92, modifier);
-
-                    const dx = player.x - coin.x;
-                    const dy = player.y - coin.y;
-                    const dist = Math.hypot(dx, dy);
-                    if (coin.timer > 300 || dist < 120) {
-                        coin.state = 'magnet';
-                    }
-                } else if (coin.state === 'magnet') {
-                    const dx = player.x - coin.x;
-                    const dy = player.y - coin.y;
-                    const dist = Math.hypot(dx, dy);
-
-                    if (dist < 18) {
-                        coin.active = false;
-                        totalCoins += 1;
-                        runCoins += 1;
-                        updateCoinsHUD();
-                        if (sound && typeof sound.playClick === 'function') {
-                            sound.playClick();
-                        }
-                        if (window.AndroidGame && typeof window.AndroidGame.saveTotalCoins === 'function') {
-                            window.AndroidGame.saveTotalCoins(totalCoins);
-                        }
-                    } else {
-                        const speed = Math.min(18, 4 + (coin.timer - 300) * 0.03) * modifier;
-                        coin.vx = (dx / dist) * speed;
-                        coin.vy = (dy / dist) * speed;
-                        coin.x += coin.vx;
-                        coin.y += coin.vy;
-                    }
-                }
-            }
-
-            for (let i = coinsList.length - 1; i >= 0; i--) {
-                if (!coinsList[i].active) {
-                    coinsList[i] = coinsList[coinsList.length - 1];
-                    coinsList.pop();
-                }
-            }
-        }
-
-        function drawCoinsList() {
-            ctx.save();
-            for (let i = 0; i < coinsList.length; i++) {
-                const coin = coinsList[i];
-                if (!coin.active) continue;
-
-                ctx.save();
-                ctx.translate(coin.x, coin.y);
-
-                const scaleX = Math.sin(coin.pulse);
-                ctx.scale(scaleX, 1);
-
-                ctx.shadowColor = '#ffd700';
-                ctx.shadowBlur = 10;
-
-                ctx.strokeStyle = '#ffd700';
-                ctx.lineWidth = 2;
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(0, 0, coin.size, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.stroke();
-
-                ctx.restore();
-            }
-            ctx.restore();
-        }
 
         // --- Player Controls & Input Handling ---
         let isTouching = false;
@@ -3921,8 +3821,6 @@
                             enemy.active = false;
                             spawnExplosion(enemy.x, enemy.y, enemy.color, 16);
                             recordEnemyKill(enemy.scoreVal);
-                            const coinAmt = enemy.type === 'elite_battleship' ? 6 : (enemy.type === 'mine' || enemy.type === 'missile' ? 1 : 2);
-                            spawnCoinsList(enemy.x, enemy.y, coinAmt);
 
                             // Nova Destroyer splash damage
                             if (shipStats && shipStats.novaExplosion) {
@@ -3948,7 +3846,6 @@
                                             if (otherEnemy.hp <= 0) {
                                                 otherEnemy.active = false;
                                                 recordEnemyKill(otherEnemy.scoreVal);
-                                                spawnCoinsList(otherEnemy.x, otherEnemy.y, 2);
                                                 
                                                 if (levelState === 'PLAYING' && levelKills >= targetKills) {
                                                     const lvlBoss = LEVELS[currentLevel]?.boss;
@@ -3983,12 +3880,11 @@
                             // Powerups drop physics (18% chance)
                             if (Math.random() < 0.18) {
                                 const roll = Math.random();
-                                let chosen = 'coin';
-                                if (roll < 0.25) chosen = 'coin';
-                                else if (roll < 0.40) chosen = 'rapid';
-                                else if (roll < 0.55) chosen = 'shield';
-                                else if (roll < 0.70) chosen = 'double';
-                                else if (roll < 0.85) chosen = 'triple';
+                                let chosen = 'rapid';
+                                if (roll < 0.20) chosen = 'rapid';
+                                else if (roll < 0.40) chosen = 'shield';
+                                else if (roll < 0.60) chosen = 'double';
+                                else if (roll < 0.80) chosen = 'triple';
                                 else chosen = 'life';
                                 spawnPowerUp(enemy.x, enemy.y, chosen);
                             }
@@ -4195,7 +4091,7 @@
             }
 
             const bonusPoints = currentLevel * 100;
-            const bonusCoins = currentLevel * 5;
+            const bonusCoins = 0;
 
             score += bonusPoints;
             totalCoins += bonusCoins;
@@ -4535,7 +4431,6 @@
                             const rx = activeBoss.x + (Math.random() * 100 - 50);
                             const ry = activeBoss.y + (Math.random() * 60 - 30);
                             spawnExplosion(rx, ry, '#ff0055', 12);
-                            spawnCoinsList(rx, ry, 4); // Shower coins!
                         }
                         if (bossDestructionTimer <= 0) {
                             activeBoss = null;
