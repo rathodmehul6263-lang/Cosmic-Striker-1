@@ -4479,7 +4479,7 @@
 
                     checkCollisions();
                     updateParticles(dt);
-                    updateCoinsList(dt);
+
                     pruneInactive();
                 }
 
@@ -4521,7 +4521,7 @@
                     ctx.restore();
                 }
 
-                drawCoinsList();
+
                 drawParticles();
             } else {
                 // Not actively playing, particles still render and updates on unpaused states
