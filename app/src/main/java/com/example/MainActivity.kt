@@ -2110,9 +2110,10 @@ fun MainMenuOverlay(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 4.dp)
+                    .padding(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Earn Coins Button (Neon style)
+                // 📺 EARN COINS Button (Neon Gold style with subtle glow)
                 val earnCoinsPulse = rememberInfiniteTransition(label = "EarnCoinsPulse")
                 val earnCoinsScale by earnCoinsPulse.animateFloat(
                     initialValue = 0.96f,
@@ -2124,104 +2125,72 @@ fun MainMenuOverlay(
                     label = "EarnCoinsScale"
                 )
 
-                Button(
-                    onClick = onEarnCoinsClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    shape = RoundedCornerShape(12.dp),
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth(0.95f)
                         .graphicsLayer {
                             scaleX = earnCoinsScale
                             scaleY = earnCoinsScale
                         }
-                        .height(42.dp)
-                        .border(
-                            BorderStroke(
-                                1.5.dp, 
-                                Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .background(
-                            Brush.horizontalGradient(
-                                listOf(
-                                    Color(0xFFFFD700).copy(alpha = 0.15f),
-                                    Color(0xFFFFA500).copy(alpha = 0.15f)
-                                )
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .testTag("earn_coins_button")
-                ) {
-                    Text(
-                        text = "📺 EARN COINS",
-                        color = Color(0xFFFFD700),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        fontFamily = FontFamily.SansSerif,
-                        letterSpacing = 1.5.sp
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Sleek cybernetic section header (transparent glassmorphism with neon cyan/purple border and subtle glow)
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(0.95f)
-                        .height(42.dp)
-                        .background(
-                            Color.Transparent, // Transparent background as requested
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .border(
-                            BorderStroke(
-                                1.2.dp,
-                                Brush.horizontalGradient(
-                                    listOf(
-                                        Color(0xFF00F0FF), // Neon Cyan
-                                        Color(0xFFBD00FF)  // Neon Purple
-                                    )
-                                )
-                            ),
-                            shape = RoundedCornerShape(12.dp)
-                        ),
+                        .fillMaxWidth(0.85f)
+                        .height(44.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    // Subtle background glow
+                    // Gold subtle glow backer
                     Box(
                         modifier = Modifier
-                            .fillMaxSize()
+                            .fillMaxWidth()
+                            .height(44.dp)
                             .background(
-                                Brush.radialGradient(
-                                    colors = listOf(
-                                        Color(0x2200F0FF),
-                                        Color.Transparent
+                                Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500))),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .graphicsLayer {
+                                scaleX = 1.02f
+                                scaleY = 1.08f
+                                alpha = 0.25f
+                            }
+                    )
+                    Button(
+                        onClick = onEarnCoinsClick,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        contentPadding = PaddingValues(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .border(
+                                BorderStroke(1.5.dp, Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFFFFA500)))),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .background(
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        Color(0xFFFFD700).copy(alpha = 0.15f),
+                                        Color(0xFFFFA500).copy(alpha = 0.15f)
                                     )
                                 ),
                                 shape = RoundedCornerShape(12.dp)
                             )
-                    )
-                    
-                    Text(
-                        text = "SELECT MISSION SECTOR",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 2.sp,
-                        textAlign = TextAlign.Center,
-                        fontFamily = FontFamily.SansSerif
-                    )
+                            .testTag("earn_coins_button")
+                    ) {
+                        Text(
+                            text = "📺 EARN COINS",
+                            color = Color(0xFFFFD700),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Black,
+                            fontFamily = FontFamily.SansSerif,
+                            letterSpacing = 1.5.sp
+                        )
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
 
+                // Sector Difficulty (Example: SECTOR 1 : EASY)
                 val (difficultyText, difficultyColor) = getDifficultyCategory(selectedLevel)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    modifier = Modifier.padding(bottom = 2.dp)
                 ) {
                     Text(
                         text = "SECTOR $selectedLevel: ",
@@ -2238,10 +2207,11 @@ fun MainMenuOverlay(
                     )
                 }
 
+                // Sector Selection Grid Box
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(120.dp)
+                        .height(115.dp)
                         .background(Color(0x7F04071C), shape = RoundedCornerShape(16.dp))
                         .border(
                             BorderStroke(1.2.dp, Brush.linearGradient(listOf(Color(0x6600F0FF), Color(0x22FFFFFF)))),
@@ -2277,248 +2247,167 @@ fun MainMenuOverlay(
                         }
                     }
                 }
-            }
 
-            // 5. PULSING START MISSION BUTTON
-            val pulseTransition = rememberInfiniteTransition(label = "StartPulse")
-            val pulseScale by pulseTransition.animateFloat(
-                initialValue = 0.98f,
-                targetValue = 1.02f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1000, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "ButtonScale"
-            )
-            val glowAlpha by pulseTransition.animateFloat(
-                initialValue = 0.4f,
-                targetValue = 0.85f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(1000, easing = FastOutSlowInEasing),
-                    repeatMode = RepeatMode.Reverse
-                ),
-                label = "GlowAlpha"
-            )
+                Spacer(modifier = Modifier.height(4.dp))
 
-            Box(
-                modifier = Modifier
-                    .graphicsLayer {
-                        scaleX = pulseScale
-                        scaleY = pulseScale
-                    }
-                    .fillMaxWidth(0.92f)
-                    .padding(bottom = 16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                // Button glow backing
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp)
-                        .background(
-                            Brush.horizontalGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF00A0))),
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        .graphicsLayer {
-                            scaleX = 1.03f
-                            scaleY = 1.12f
-                            alpha = glowAlpha * 0.4f
-                        }
+                // PULSING START MISSION BUTTON (Blue -> Pink neon gradient)
+                val pulseTransition = rememberInfiniteTransition(label = "StartPulse")
+                val pulseScale by pulseTransition.animateFloat(
+                    initialValue = 0.98f,
+                    targetValue = 1.02f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1000, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "ButtonScale"
+                )
+                val glowAlpha by pulseTransition.animateFloat(
+                    initialValue = 0.4f,
+                    targetValue = 0.85f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(1000, easing = FastOutSlowInEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "GlowAlpha"
                 )
 
-                Button(
-                    onClick = onLaunchMission,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    contentPadding = PaddingValues(),
-                    shape = RoundedCornerShape(16.dp),
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .border(
-                            BorderStroke(2.dp, Brush.horizontalGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF00A0)))),
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        .background(
-                            Brush.horizontalGradient(listOf(Color(0xFF024673), Color(0xFF42025C))),
-                            shape = RoundedCornerShape(16.dp)
-                        )
+                        .graphicsLayer {
+                            scaleX = pulseScale
+                            scaleY = pulseScale
+                        }
+                        .fillMaxWidth(0.85f),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
+                    // Blue -> Pink neon glow backer
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .background(
+                                Brush.horizontalGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF00A0))),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .graphicsLayer {
+                                scaleX = 1.02f
+                                scaleY = 1.08f
+                                alpha = glowAlpha * 0.4f
+                            }
+                    )
+
+                    Button(
+                        onClick = onLaunchMission,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        contentPadding = PaddingValues(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(44.dp)
+                            .border(
+                                BorderStroke(1.5.dp, Brush.horizontalGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF00A0)))),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .background(
+                                Brush.horizontalGradient(listOf(Color(0xFF024673), Color(0xFF42025C))),
+                                shape = RoundedCornerShape(12.dp)
+                            )
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(26.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "LAUNCH SECTOR $selectedLevel",
-                            color = Color.White,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = 2.sp,
-                            fontFamily = FontFamily.SansSerif
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "LAUNCH SECTOR $selectedLevel",
+                                color = Color.White,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Black,
+                                letterSpacing = 2.sp,
+                                fontFamily = FontFamily.SansSerif
+                            )
+                        }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // STATS, REWARDS, ACHIEVEMENTS ROW
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Upgrades Button
-                Button(
-                    onClick = onUpgradeClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    contentPadding = PaddingValues(),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(38.dp)
-                        .border(BorderStroke(1.dp, Color(0xFF00FF88)), shape = RoundedCornerShape(12.dp))
-                        .background(Color(0x3300FF88), shape = RoundedCornerShape(12.dp))
-                        .testTag("upgrades_button")
-                ) {
-                    Text(
-                        text = "🛠️ UPGRADES",
-                        color = Color(0xFF00FF88),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-
-                // Daily Rewards Button
-                Button(
-                    onClick = onDailyRewardsClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    contentPadding = PaddingValues(),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(38.dp)
-                        .border(BorderStroke(1.dp, Color(0xFFFFD700)), shape = RoundedCornerShape(12.dp))
-                        .background(Color(0x33FFFFD7), shape = RoundedCornerShape(12.dp))
-                        .testTag("daily_rewards_button")
-                ) {
-                    Text(
-                        text = "🎁 DAILY CLAIM",
-                        color = Color(0xFFFFD700),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-
-                // Achievements Button
-                Button(
-                    onClick = onAchievementsClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    contentPadding = PaddingValues(),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(38.dp)
-                        .border(BorderStroke(1.dp, Color(0xFFFF00A0)), shape = RoundedCornerShape(12.dp))
-                        .background(Color(0x33FF00A0), shape = RoundedCornerShape(12.dp))
-                        .testTag("achievements_button")
-                ) {
-                    Text(
-                        text = "🏆 ACHIEVES",
-                        color = Color(0xFFFF00A0),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // 6. CYBERNETIC QUICK COMMAND DOCK (Leaderboard, Sound Toggle, System Settings)
+            // 6. Bottom Navigation in One Row
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Leaderboard Button
-                Button(
+                val buttonWeight = 1f
+
+                // 1. Upgrades
+                CompactNavButton(
+                    icon = "🔧",
+                    label = "UPGRADES",
+                    borderColor = Color(0xFF00FF88),
+                    bgColor = Color(0xFF00FF88).copy(alpha = 0.12f),
+                    onClick = onUpgradeClick,
+                    modifier = Modifier.weight(buttonWeight).testTag("upgrades_button")
+                )
+
+                // 2. Daily Rewards
+                CompactNavButton(
+                    icon = "🎁",
+                    label = "DAILY CLAIM",
+                    borderColor = Color(0xFFFFD700),
+                    bgColor = Color(0xFFFFD700).copy(alpha = 0.12f),
+                    onClick = onDailyRewardsClick,
+                    modifier = Modifier.weight(buttonWeight).testTag("daily_rewards_button")
+                )
+
+                // 3. Achievements
+                CompactNavButton(
+                    icon = "🏆",
+                    label = "ACHIEVES",
+                    borderColor = Color(0xFFFF00A0),
+                    bgColor = Color(0xFFFF00A0).copy(alpha = 0.12f),
+                    onClick = onAchievementsClick,
+                    modifier = Modifier.weight(buttonWeight).testTag("achievements_button")
+                )
+
+                // 4. Leaders
+                CompactNavButton(
+                    icon = "📊",
+                    label = "LEADERS",
+                    borderColor = Color(0xFF00F0FF),
+                    bgColor = Color(0xFF00F0FF).copy(alpha = 0.12f),
                     onClick = onLeaderboardClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    contentPadding = PaddingValues(),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(42.dp)
-                        .border(BorderStroke(1.dp, Color(0xFF00F0FF).copy(alpha = 0.8f)), shape = RoundedCornerShape(12.dp))
-                        .background(Color(0x660A0F2D), shape = RoundedCornerShape(12.dp))
-                ) {
-                    Text(
-                        text = "🏆 LEADERS",
-                        color = Color(0xFF00F0FF),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
+                    modifier = Modifier.weight(buttonWeight)
+                )
 
-                // Sound Button Toggle
-                Button(
+                // 5. Audio
+                CompactNavButton(
+                    icon = if (soundEnabled) "🔊" else "🔇",
+                    label = if (soundEnabled) "AUDIO" else "MUTED",
+                    borderColor = if (soundEnabled) Color(0xFF00F0FF) else Color(0x66FFFFFF),
+                    bgColor = if (soundEnabled) Color(0xFF00F0FF).copy(alpha = 0.12f) else Color(0x11FFFFFF),
                     onClick = { onSoundToggled(!soundEnabled) },
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                    contentPadding = PaddingValues(),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(42.dp)
-                        .border(
-                            BorderStroke(1.dp, if (soundEnabled) Color(0xFF00F0FF) else Color(0x44FFFFFF)),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .background(
-                            if (soundEnabled) Color(0x3300F0FF) else Color(0x22000000),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                ) {
-                    Text(
-                        text = if (soundEnabled) "🔊 AUDIO: ON" else "🔇 AUDIO: OFF",
-                        color = if (soundEnabled) Color.White else Color(0x88FFFFFF),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
+                    modifier = Modifier.weight(buttonWeight)
+                )
 
-                // Settings Button
-                IconButton(
+                // 6. Settings
+                CompactNavButton(
+                    icon = "⚙️",
+                    label = "SETTINGS",
+                    borderColor = Color(0xFF00F0FF),
+                    bgColor = Color(0xFF00F0FF).copy(alpha = 0.12f),
                     onClick = onSettingsClick,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .background(Color(0x660A0F2D), shape = RoundedCornerShape(12.dp))
-                        .border(BorderStroke(1.dp, Color(0xFF00F0FF).copy(alpha = 0.8f)), shape = RoundedCornerShape(12.dp))
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "System Settings",
-                        tint = Color(0xFF00F0FF)
-                    )
-                }
+                    modifier = Modifier.weight(buttonWeight)
+                )
             }
         }
 
@@ -2590,6 +2479,45 @@ fun LevelSelectorItem(
                 text = "🔒",
                 fontSize = 11.sp,
                 color = Color(0x44FFFFFF)
+            )
+        }
+    }
+}
+
+@Composable
+fun CompactNavButton(
+    icon: String,
+    label: String,
+    borderColor: Color,
+    bgColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+        contentPadding = PaddingValues(0.dp),
+        shape = RoundedCornerShape(10.dp),
+        modifier = modifier
+            .height(48.dp)
+            .border(BorderStroke(1.dp, borderColor.copy(alpha = 0.8f)), shape = RoundedCornerShape(10.dp))
+            .background(bgColor, shape = RoundedCornerShape(10.dp))
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Text(text = icon, fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(
+                text = label,
+                color = if (borderColor == Color(0x66FFFFFF)) Color(0xAAFFFFFF) else Color.White,
+                fontSize = 7.5.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                maxLines = 1,
+                letterSpacing = 0.2.sp
             )
         }
     }
@@ -4058,8 +3986,22 @@ fun SpaceshipGarageCarousel(
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
                         .height(44.dp)
-                        .background(Color(0xFF39FF14).copy(alpha = 0.12f), shape = RoundedCornerShape(10.dp))
-                        .border(BorderStroke(1.2.dp, Color(0xFF39FF14)), shape = RoundedCornerShape(10.dp)),
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFF39FF14).copy(alpha = 0.12f),
+                                    Color(0xFF00FF88).copy(alpha = 0.12f)
+                                )
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        .border(
+                            BorderStroke(
+                                1.5.dp,
+                                Brush.horizontalGradient(listOf(Color(0xFF39FF14), Color(0xFF00FF88)))
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -4067,7 +4009,8 @@ fun SpaceshipGarageCarousel(
                         color = Color(0xFF39FF14),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 1.sp
+                        letterSpacing = 1.5.sp,
+                        fontFamily = FontFamily.SansSerif
                     )
                 }
             } else if (isOwned) {
@@ -4075,12 +4018,12 @@ fun SpaceshipGarageCarousel(
                     onClick = { onEquipShip(ship.id) },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                     contentPadding = PaddingValues(),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
                         .height(44.dp)
-                        .border(BorderStroke(1.2.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(10.dp))
-                        .background(Brush.linearGradient(listOf(Color(0xFF003366), Color(0xFF0077AA))), shape = RoundedCornerShape(10.dp))
+                        .border(BorderStroke(1.5.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(12.dp))
+                        .background(Brush.linearGradient(listOf(Color(0xFF003366), Color(0xFF0077AA))), shape = RoundedCornerShape(12.dp))
                         .testTag("equip_ship_button")
                 ) {
                     Text(
@@ -4114,25 +4057,25 @@ fun SpaceshipGarageCarousel(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
                     contentPadding = PaddingValues(),
-                    shape = RoundedCornerShape(10.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth(0.85f)
                         .height(44.dp)
                         .offset(x = shakeOffset)
                         .border(
                             BorderStroke(
-                                1.2.dp,
+                                1.5.dp,
                                 if (isErrorActive) Color(0xFFFF3333)
                                 else if (canAfford) Color(0xFFFFD700)
                                 else Color(0xFFFF4D4D)
                             ),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
                         .background(
                             if (isErrorActive) Brush.linearGradient(listOf(Color(0xFF881111), Color(0xFFBB1111)))
                             else if (canAfford) Brush.linearGradient(listOf(Color(0xFF665500), Color(0xFFCCAA00)))
                             else Brush.linearGradient(listOf(Color(0xFF441111), Color(0xFF661111))),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
                         .testTag("buy_ship_button")
                 ) {
