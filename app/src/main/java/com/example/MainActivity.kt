@@ -157,6 +157,7 @@ class MainActivity : ComponentActivity() {
 
     // Upgrade Dialog state variable
     private var showUpgradeDialog by mutableStateOf(false)
+    private var showAnnouncementPopup by mutableStateOf(true)
 
     // Ads simulator state variables
     private var showAdSimulator by mutableStateOf(false)
@@ -1360,6 +1361,25 @@ class MainActivity : ComponentActivity() {
                                 onClose = {
                                     playClickSound()
                                     showAchievementsDialog = false
+                                }
+                            )
+                        }
+
+                        // Announcement Popup
+                        if (showAnnouncementPopup) {
+                            AnnouncementPopup(
+                                onJoinTelegram = {
+                                    playClickSound()
+                                    try {
+                                        val telegramIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/cosmicstriker"))
+                                        this@MainActivity.startActivity(telegramIntent)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(this@MainActivity, "Cannot open link", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                onClose = {
+                                    playClickSound()
+                                    showAnnouncementPopup = false
                                 }
                             )
                         }
@@ -5865,6 +5885,191 @@ fun AchievementAnimatedPopup(
                         fontWeight = FontWeight.ExtraBold,
                         fontFamily = FontFamily.Monospace
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AnnouncementPopup(
+    onJoinTelegram: () -> Unit,
+    onClose: () -> Unit
+) {
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onClose
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+                .background(Color(0xFF0F0F14), shape = RoundedCornerShape(24.dp))
+                .border(
+                    BorderStroke(2.dp, Color(0xFFFFD700)),
+                    shape = RoundedCornerShape(24.dp)
+                )
+                .testTag("announcement_popup")
+        ) {
+            // Close Button in top right (❌)
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+                    .size(40.dp)
+                    .testTag("announcement_close_icon_button")
+            ) {
+                Text(
+                    text = "❌",
+                    fontSize = 16.sp,
+                    color = Color.White
+                )
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Trophy Icon / Header
+                Text(
+                    text = "🏆 MONTHLY CHAMPIONSHIP 🏆",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFFFFD700),
+                    textAlign = TextAlign.Center,
+                    fontFamily = FontFamily.Monospace,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
+
+                // Cash Reward Callout Card
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF1D1B20), shape = RoundedCornerShape(12.dp))
+                        .border(BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.3f)), shape = RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "Win $50 USD Cash Reward!",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF00F0FF),
+                            textAlign = TextAlign.Center,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "To qualify, complete ALL of these during the current month:",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.LightGray,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                }
+
+                // Requirements List
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val requirements = listOf(
+                        "Reach Level 50",
+                        "Get the Highest Total Kills",
+                        "Join our Telegram Community",
+                        "Make any in-game recharge"
+                    )
+                    requirements.forEach { req ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Color(0xFF16161F), shape = RoundedCornerShape(8.dp))
+                                .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.08f)), shape = RoundedCornerShape(8.dp))
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Text(
+                                text = "•",
+                                color = Color(0xFFFFD700),
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = req,
+                                color = Color.White,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.SansSerif
+                            )
+                        }
+                    }
+                }
+
+                // Footer description text
+                Text(
+                    text = "The top eligible player at the end of the month will receive $50 USD.\n\nGood luck, Commander!",
+                    fontSize = 11.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center,
+                    fontFamily = FontFamily.SansSerif,
+                    lineHeight = 16.sp,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+
+                // Actions/Buttons Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    // Close button
+                    Button(
+                        onClick = onClose,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2C2C35)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(48.dp)
+                            .testTag("announcement_close_button")
+                    ) {
+                        Text(
+                            text = "CLOSE",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    // Join Telegram button
+                    Button(
+                        onClick = onJoinTelegram,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0088CC)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1.2f)
+                            .height(48.dp)
+                            .testTag("announcement_telegram_button")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(text = "✈️", fontSize = 12.sp)
+                            Text(
+                                text = "JOIN TELEGRAM",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
                 }
             }
         }
