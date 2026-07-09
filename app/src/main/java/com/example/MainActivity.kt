@@ -4033,7 +4033,7 @@ fun SpaceshipGarageCarousel(
             }
         }
 
-        // Space indicators for carousel index with Share button on the right
+        // Space indicators for carousel index with Share button on the right and Telegram button on the left
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -4041,6 +4041,37 @@ fun SpaceshipGarageCarousel(
                 .padding(bottom = 6.dp),
             contentAlignment = Alignment.Center
         ) {
+            val context = LocalContext.current
+
+            // Telegram Button aligned on the left, perfectly symmetrical with the Share button
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .clickable {
+                        val telegramIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://t.me/cosmicstriker"))
+                        context.startActivity(telegramIntent)
+                    }
+                    .background(Color(0xFF8B5CF6).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp))
+                    .border(BorderStroke(1.2.dp, Color(0xFF8B5CF6)), shape = RoundedCornerShape(12.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .testTag("telegram_button"),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(text = "✈️", fontSize = 11.sp)
+                    Text(
+                        text = "TELEGRAM",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
             // Space indicators for carousel index
             Row(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -4059,7 +4090,6 @@ fun SpaceshipGarageCarousel(
             }
 
             // Share Button aligned on the right, exactly where the red rectangle is indicated
-            val context = LocalContext.current
             Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
