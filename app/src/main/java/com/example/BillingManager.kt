@@ -29,7 +29,6 @@ class BillingManager(
         const val GALAXY_PACK = "coin_pack_galaxy"
 
         val PRODUCT_IDS = listOf(
-            STARTER_PACK,
             VALUE_PACK,
             PRO_PACK,
             MEGA_PACK,

@@ -63,16 +63,6 @@ fun CoinShopDialog(
     val coinPacks = remember {
         listOf(
             CoinPack(
-                id = BillingManager.STARTER_PACK,
-                name = "Starter Pack",
-                coinAmount = 2000,
-                defaultPriceLabel = "₹29",
-                description = "Get a cosmic head start",
-                highlight = "GOOD START",
-                gradientColors = listOf(Color(0xFFFF8C00), Color(0xFFFF4500)),
-                emoji = "🪙"
-            ),
-            CoinPack(
                 id = BillingManager.VALUE_PACK,
                 name = "Value Pack",
                 coinAmount = 10000,
