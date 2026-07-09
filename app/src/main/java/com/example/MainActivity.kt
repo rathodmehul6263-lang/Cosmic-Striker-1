@@ -3976,7 +3976,6 @@ fun SpaceshipGarageCarousel(
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
-                        .fillMaxWidth(0.6f)
                         .graphicsLayer {
                             translationY = floatOffset
                             rotationZ = (swipeOffset / 10f).coerceIn(-15f, 15f)
@@ -4014,52 +4013,6 @@ fun SpaceshipGarageCarousel(
                         }
                     }
                 }
-
-                // Empty square area on the right side of the ship preview (highlighted placeholder area)
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .padding(end = 12.dp)
-                        .size(72.dp)
-                        .background(Color(0xFF8B5CF6).copy(alpha = 0.05f), shape = RoundedCornerShape(12.dp))
-                        .border(
-                            BorderStroke(1.2.dp, Color(0xFF8B5CF6).copy(alpha = 0.3f)),
-                            shape = RoundedCornerShape(12.dp)
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Share Button
-                    val context = LocalContext.current
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clickable {
-                                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/plain"
-                                    putExtra(Intent.EXTRA_TEXT, "Play Cosmic Striker - Defend the Galaxy! Download now: https://play.google.com/store/apps/details?id=com.example.cosmicstriker")
-                                }
-                                context.startActivity(Intent.createChooser(shareIntent, "Share Cosmic Striker via"))
-                            }
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .background(Color(0xFF8B5CF6).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp))
-                                .border(BorderStroke(1.2.dp, Color(0xFF8B5CF6)), shape = RoundedCornerShape(12.dp))
-                                .padding(horizontal = 10.dp, vertical = 6.dp)
-                                .testTag("share_button")
-                        ) {
-                            Text(text = "📤 ", fontSize = 11.sp)
-                            Text(
-                                text = "SHARE",
-                                color = Color.White,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                    }
-                }
             }
 
             // Right Button
@@ -4080,20 +4033,62 @@ fun SpaceshipGarageCarousel(
             }
         }
 
-        // Space indicators for carousel index
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.padding(bottom = 6.dp)
+        // Space indicators for carousel index with Share button on the right
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 6.dp),
+            contentAlignment = Alignment.Center
         ) {
-            SPACESHIPS_LIST.forEachIndexed { idx, item ->
-                Box(
-                    modifier = Modifier
-                        .size(if (idx == currentIndex) 10.dp else 6.dp)
-                        .background(
-                            color = if (idx == currentIndex) Color(0xFF00F0FF) else Color.White.copy(alpha = 0.3f),
-                            shape = RoundedCornerShape(50)
-                        )
-                )
+            // Space indicators for carousel index
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                SPACESHIPS_LIST.forEachIndexed { idx, item ->
+                    Box(
+                        modifier = Modifier
+                            .size(if (idx == currentIndex) 10.dp else 6.dp)
+                            .background(
+                                color = if (idx == currentIndex) Color(0xFF00F0FF) else Color.White.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(50)
+                            )
+                    )
+                }
+            }
+
+            // Share Button aligned on the right, exactly where the red rectangle is indicated
+            val context = LocalContext.current
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .clickable {
+                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, "Play Cosmic Striker - Defend the Galaxy! Download now: https://play.google.com/store/apps/details?id=com.example.cosmicstriker")
+                        }
+                        context.startActivity(Intent.createChooser(shareIntent, "Share Cosmic Striker via"))
+                    }
+                    .background(Color(0xFF8B5CF6).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp))
+                    .border(BorderStroke(1.2.dp, Color(0xFF8B5CF6)), shape = RoundedCornerShape(12.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .testTag("share_button"),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(text = "📤", fontSize = 11.sp)
+                    Text(
+                        text = "SHARE",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
             }
         }
 
