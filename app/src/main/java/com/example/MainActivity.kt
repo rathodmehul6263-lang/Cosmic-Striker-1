@@ -5896,6 +5896,35 @@ fun AnnouncementPopup(
     onJoinTelegram: () -> Unit,
     onClose: () -> Unit
 ) {
+    var timeString by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            val now = java.util.Calendar.getInstance()
+            val targetCal = java.util.Calendar.getInstance().apply {
+                timeInMillis = now.timeInMillis
+                set(java.util.Calendar.DAY_OF_MONTH, getActualMaximum(java.util.Calendar.DAY_OF_MONTH))
+                set(java.util.Calendar.HOUR_OF_DAY, 23)
+                set(java.util.Calendar.MINUTE, 59)
+                set(java.util.Calendar.SECOND, 59)
+                set(java.util.Calendar.MILLISECOND, 0)
+            }
+            val diffMs = targetCal.timeInMillis - now.timeInMillis
+            if (diffMs <= 0) {
+                timeString = "🏁 Event Ended!"
+            } else {
+                val diffSec = diffMs / 1000
+                val days = diffSec / (24 * 3600)
+                val hours = (diffSec % (24 * 3600)) / 3600
+                val minutes = (diffSec % 3600) / 60
+                val seconds = diffSec % 60
+
+                timeString = String.format("%02d Days : %02d Hours : %02d Minutes : %02d Seconds", days, hours, minutes, seconds)
+            }
+            kotlinx.coroutines.delay(1000L)
+        }
+    }
+
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onClose
     ) {
@@ -5944,19 +5973,19 @@ fun AnnouncementPopup(
                     modifier = Modifier.padding(horizontal = 24.dp)
                 )
 
-                // Cash Reward Callout Card
+                // Reward Callout Card
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Color(0xFF1D1B20), shape = RoundedCornerShape(12.dp))
-                        .border(BorderStroke(1.dp, Color(0xFFFFD700).copy(alpha = 0.3f)), shape = RoundedCornerShape(12.dp))
-                        .padding(16.dp),
+                        .border(BorderStroke(1.2.dp, Color(0xFFFFD700).copy(alpha = 0.5f)), shape = RoundedCornerShape(12.dp))
+                        .padding(14.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = "Win $50 USD Cash Reward!",
-                            fontSize = 20.sp,
+                            text = "💰 Win $50 USD Real Cash!",
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Black,
                             color = Color(0xFF00F0FF),
                             textAlign = TextAlign.Center,
@@ -5968,7 +5997,7 @@ fun AnnouncementPopup(
                             fontWeight = FontWeight.Medium,
                             color = Color.LightGray,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = 8.dp)
+                            modifier = Modifier.padding(top = 6.dp)
                         )
                     }
                 }
@@ -5976,12 +6005,12 @@ fun AnnouncementPopup(
                 // Requirements List
                 Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     val requirements = listOf(
                         "Reach Level 50",
                         "Get the Highest Total Kills",
-                        "Join our Telegram Community",
+                        "Join the Telegram Community",
                         "Make any in-game recharge"
                     )
                     requirements.forEach { req ->
@@ -5990,8 +6019,8 @@ fun AnnouncementPopup(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Color(0xFF16161F), shape = RoundedCornerShape(8.dp))
-                                .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.08f)), shape = RoundedCornerShape(8.dp))
+                                .background(Color(0xFF16161F), shape = RoundedCornerShape(10.dp))
+                                .border(BorderStroke(0.5.dp, Color.White.copy(alpha = 0.08f)), shape = RoundedCornerShape(10.dp))
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
                             Text(
@@ -6011,6 +6040,35 @@ fun AnnouncementPopup(
                     }
                 }
 
+                // Countdown Timer Section
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF1A1A24), shape = RoundedCornerShape(12.dp))
+                        .border(BorderStroke(1.5.dp, Color(0xFF00F0FF)), shape = RoundedCornerShape(12.dp))
+                        .padding(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = "⏳ TIME REMAINING",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF00F0FF),
+                        letterSpacing = 1.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = timeString,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.testTag("announcement_countdown_timer")
+                    )
+                }
+
                 // Footer description text
                 Text(
                     text = "The top eligible player at the end of the month will receive $50 USD.\n\nGood luck, Commander!",
@@ -6018,8 +6076,8 @@ fun AnnouncementPopup(
                     color = Color.Gray,
                     textAlign = TextAlign.Center,
                     fontFamily = FontFamily.SansSerif,
-                    lineHeight = 16.sp,
-                    modifier = Modifier.padding(vertical = 4.dp)
+                    lineHeight = 15.sp,
+                    modifier = Modifier.padding(vertical = 2.dp)
                 )
 
                 // Actions/Buttons Row
@@ -6037,13 +6095,19 @@ fun AnnouncementPopup(
                             .height(48.dp)
                             .testTag("announcement_close_button")
                     ) {
-                        Text(
-                            text = "CLOSE",
-                            color = Color.White,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(text = "❌", fontSize = 12.sp)
+                            Text(
+                                text = "CLOSE",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
                     }
 
                     // Join Telegram button
@@ -6060,7 +6124,7 @@ fun AnnouncementPopup(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text(text = "✈️", fontSize = 12.sp)
+                            Text(text = "🚀", fontSize = 12.sp)
                             Text(
                                 text = "JOIN TELEGRAM",
                                 color = Color.White,
