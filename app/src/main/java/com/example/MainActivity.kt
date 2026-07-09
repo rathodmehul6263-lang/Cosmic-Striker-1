@@ -2167,7 +2167,38 @@ fun MainMenuOverlay(
                     }
                 }
 
-
+                // Center: Share Button
+                val context = LocalContext.current
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .clickable {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, "Play Cosmic Striker - Defend the Galaxy! Download now: https://play.google.com/store/apps/details?id=com.example.cosmicstriker")
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Share Cosmic Striker via"))
+                        }
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .background(Color(0xFF8B5CF6).copy(alpha = 0.15f), shape = RoundedCornerShape(12.dp))
+                            .border(BorderStroke(1.2.dp, Color(0xFF8B5CF6)), shape = RoundedCornerShape(12.dp))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .testTag("share_button")
+                    ) {
+                        Text(text = "📤 ", fontSize = 11.sp)
+                        Text(
+                            text = "SHARE",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
 
                 // Right: Coins Indicator
                 Row(
