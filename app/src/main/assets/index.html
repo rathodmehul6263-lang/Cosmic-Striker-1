@@ -4246,10 +4246,24 @@
             isGameOverProcessed = false;
             gameState = 'PLAYING';
             hud.classList.remove('hidden');
-            bossHud.classList.add('hidden');
+            
+            if (levelState === 'BOSS_FIGHT' && activeBoss) {
+                bossHud.classList.remove('hidden');
+                const percent = Math.max(0, Math.floor((activeBoss.hp / activeBoss.maxHp) * 100));
+                document.getElementById('boss-name').textContent = activeBoss.name;
+                document.getElementById('boss-health-fill').style.width = `${percent}%`;
+                document.getElementById('boss-hp-text').textContent = `${percent}%`;
+            } else {
+                bossHud.classList.add('hidden');
+            }
+            
             if (player) {
                 player.invulnFrames = 3000;
                 player.hasShield = true;
+                player.x = canvas.width / 2;
+                player.y = canvas.height * 0.8;
+                player.targetX = player.x;
+                player.targetY = player.y;
             }
         };
 
