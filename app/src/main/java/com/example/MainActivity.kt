@@ -5249,21 +5249,6 @@ fun UpgradeDialog(
                     color = Color(0xFF00FF88),
                     fontFamily = FontFamily.Monospace
                 )
-                
-                Box(
-                    modifier = Modifier
-                        .background(Color(0x33FFFF00), shape = RoundedCornerShape(8.dp))
-                        .border(1.dp, Color(0xFFFFD700), shape = RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "🪙 $currentCoins",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFFFFD700),
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
             }
         },
         text = {
