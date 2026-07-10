@@ -656,16 +656,13 @@ class MainActivity : ComponentActivity() {
         // Achievement 8: Unlock Every Spaceship (8 spaceships)
         if (ownedShipsState.size >= 8 && !completed.contains("unlock_all_ships")) {
             completed.add("unlock_all_ships")
-            isLegendarySkinUnlockedState = true
-            prefs.edit().putBoolean("legendary_skin_unlocked", true).apply()
-            awardAchievement("unlock_all_ships", "LEGENDARY PILOT", "Unlocked every single spaceship! Unlocked Legendary Ship Skin!", 0)
+            awardAchievement("unlock_all_ships", "LEGENDARY PILOT", "Unlocked every single spaceship! Unlock Legendary Ship Skin!", 0)
         }
 
         prefs.edit().putStringSet("completed_achievements", completed).apply()
     }
 
     private fun awardAchievement(id: String, title: String, description: String, coinReward: Int) {
-        setTotalCoins(totalCoinsState + coinReward)
         activeAchievementPopup = AchievementPopupData(id, title, description, coinReward)
         webView?.post {
             webView?.evaluateJavascript("if (window.sound) { window.sound.playPowerUp(); }", null)
@@ -1350,14 +1347,39 @@ class MainActivity : ComponentActivity() {
 
                         // Achievements Dialog
                         if (showAchievementsDialog) {
-                            val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
-                            val completedSet = prefs.getStringSet("completed_achievements", emptySet()) ?: emptySet()
+                            val prefs = remember { getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE) }
+                            var completedSet by remember {
+                                mutableStateOf(prefs.getStringSet("completed_achievements", emptySet()) ?: emptySet())
+                            }
+                            var claimedSet by remember {
+                                mutableStateOf(prefs.getStringSet("claimed_achievements", emptySet()) ?: emptySet())
+                            }
+
                             AchievementsDialog(
                                 completedIds = completedSet,
+                                claimedIds = claimedSet,
                                 totalKills = totalKillsState,
                                 highestLevel = highestLevelState,
                                 totalCoins = totalCoinsState,
                                 ownedShipsCount = ownedShipsState.size,
+                                onClaimReward = { id, rewardCoins ->
+                                    playClickSound()
+                                    if (rewardCoins > 0) {
+                                        setTotalCoins(totalCoinsState + rewardCoins)
+                                    }
+                                    
+                                    val currentClaimed = prefs.getStringSet("claimed_achievements", emptySet())?.toMutableSet() ?: mutableSetOf()
+                                    currentClaimed.add(id)
+                                    prefs.edit().putStringSet("claimed_achievements", currentClaimed).apply()
+                                    claimedSet = currentClaimed
+                                    
+                                    if (id == "unlock_all_ships") {
+                                        isLegendarySkinUnlockedState = true
+                                        prefs.edit().putBoolean("legendary_skin_unlocked", true).apply()
+                                    }
+                                    
+                                    AuthManager.syncProfileToFirestore(this@MainActivity)
+                                },
                                 onClose = {
                                     playClickSound()
                                     showAchievementsDialog = false
@@ -5507,10 +5529,12 @@ fun UpgradeDialog(
 @Composable
 fun AchievementsDialog(
     completedIds: Set<String>,
+    claimedIds: Set<String>,
     totalKills: Int,
     highestLevel: Int,
     totalCoins: Int,
     ownedShipsCount: Int,
+    onClaimReward: (String, Int) -> Unit,
     onClose: () -> Unit
 ) {
     val achievements = listOf(
@@ -5523,6 +5547,30 @@ fun AchievementsDialog(
         Pair("coins_10000", Triple("💎 TREASURE HUNTER", "Amassed 10,000 total stellar credits!\nReward: 1000 Coins", 10000)),
         Pair("unlock_all_ships", Triple("🚀 LEGENDARY PILOT", "Unlocked every single spaceship!\nReward: Legendary Ship Skin", 8))
     )
+
+    var claimAnimAmount by remember { mutableStateOf<Int?>(null) }
+    var claimAnimText by remember { mutableStateOf<String?>(null) }
+    val claimAnimAlpha = remember { androidx.compose.animation.core.Animatable(0f) }
+    val claimAnimOffsetY = remember { androidx.compose.animation.core.Animatable(0f) }
+
+    LaunchedEffect(claimAnimAmount, claimAnimText) {
+        if (claimAnimAmount != null || claimAnimText != null) {
+            claimAnimAlpha.snapTo(0f)
+            claimAnimOffsetY.snapTo(20f)
+            kotlinx.coroutines.coroutineScope {
+                this.launch {
+                    claimAnimAlpha.animateTo(1f, androidx.compose.animation.core.tween(300))
+                }
+                this.launch {
+                    claimAnimOffsetY.animateTo(-40f, androidx.compose.animation.core.tween(1000, easing = androidx.compose.animation.core.LinearOutSlowInEasing))
+                }
+            }
+            kotlinx.coroutines.delay(1200)
+            claimAnimAlpha.animateTo(0f, androidx.compose.animation.core.tween(300))
+            claimAnimAmount = null
+            claimAnimText = null
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onClose,
@@ -5556,11 +5604,10 @@ fun AchievementsDialog(
             }
         },
         text = {
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(300.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .height(300.dp)
             ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -5582,6 +5629,17 @@ fun AchievementsDialog(
                         }
 
                         val progressRatio = (currentProgress.toFloat() / target.toFloat()).coerceIn(0f, 1f)
+                        val coinReward = when (id) {
+                            "kills_100" -> 500
+                            "kills_500" -> 1000
+                            "kills_1000" -> 2500
+                            "level_10" -> 300
+                            "level_25" -> 800
+                            "level_50" -> 2000
+                            "coins_10000" -> 1000
+                            else -> 0
+                        }
+                        val isClaimed = claimedIds.contains(id)
 
                         Row(
                             modifier = Modifier
@@ -5642,18 +5700,110 @@ fun AchievementsDialog(
                                 }
                             }
 
-                            Box(
-                                modifier = Modifier
-                                    .size(32.dp)
-                                    .background(
-                                        if (isCompleted) Color(0x33FF00A0) else Color(0xFF252530),
-                                        shape = CircleShape
-                                    ),
-                                contentAlignment = Alignment.Center
+                            if (isCompleted) {
+                                if (isClaimed) {
+                                    // Green CLAIMED badge
+                                    Row(
+                                        modifier = Modifier
+                                            .background(Color(0x2200FF88), shape = RoundedCornerShape(8.dp))
+                                            .border(1.dp, Color(0xFF00FF88), shape = RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 8.dp, vertical = 6.dp)
+                                            .testTag("claimed_badge_$id"),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = "✓",
+                                            color = Color(0xFF00FF88),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "CLAIMED",
+                                            color = Color(0xFF00FF88),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                } else {
+                                    // Glowing CLAIM Button
+                                    Button(
+                                        onClick = {
+                                            onClaimReward(id, coinReward)
+                                            if (coinReward > 0) {
+                                                claimAnimAmount = coinReward
+                                            } else {
+                                                claimAnimText = "+Legendary Skin Claimed! 🚀"
+                                            }
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier
+                                            .testTag("claim_button_$id")
+                                            .border(1.5.dp, Color(0xFFFFF099), shape = RoundedCornerShape(8.dp))
+                                    ) {
+                                        Text(
+                                            text = "CLAIM",
+                                            color = Color.Black,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Black,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                }
+                            } else {
+                                // Locked state
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .background(Color(0xFF252530), shape = CircleShape)
+                                        .testTag("locked_badge_$id"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "🔒",
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Floating claim animation overlay
+                if (claimAnimAmount != null || claimAnimText != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer(
+                                alpha = claimAnimAlpha.value,
+                                translationY = claimAnimOffsetY.value
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Surface(
+                            color = Color(0xFF0F0F14).copy(alpha = 0.95f),
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(2.dp, Color(0xFFFFD700)),
+                            shadowElevation = 8.dp
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = if (isCompleted) "🏆" else "🔒",
-                                    fontSize = 14.sp
+                                    text = if (claimAnimAmount != null) "🪙" else "🚀",
+                                    fontSize = 20.sp
+                                )
+                                Text(
+                                    text = claimAnimText ?: "+$claimAnimAmount Coins Claimed!",
+                                    color = Color(0xFFFFD700),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Black,
+                                    fontFamily = FontFamily.Monospace
                                 )
                             }
                         }
@@ -5859,13 +6009,20 @@ fun AchievementAnimatedPopup(
                         .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text(
-                        text = "+$coinReward COINS CREDITED",
+                        text = if (coinReward > 0) "+$coinReward COINS UNLOCKED" else "LEGENDARY SKIN UNLOCKED",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = Color(0xFFFFD700),
                         fontFamily = FontFamily.Monospace
                     )
                 }
+
+                Text(
+                    text = "Claim your reward in the Achievements menu",
+                    fontSize = 10.sp,
+                    color = Color.Gray,
+                    textAlign = TextAlign.Center
+                )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
