@@ -25,12 +25,14 @@ object AuthManager {
         val name = prefs.getString("player_name", null)
         if (uid != null && name != null) {
             val photoUrl = prefs.getString("player_profile_pic_path", "") ?: ""
+            val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+            val provider = if (firebaseUser?.isAnonymous == true) "Anonymous" else if (firebaseUser != null) "Google" else "LocalCustom"
             currentUser = UserProfile(
                 id = uid,
                 name = name,
                 photoUrl = photoUrl,
-                email = "",
-                provider = "LocalCustom"
+                email = firebaseUser?.email ?: "",
+                provider = provider
             )
         } else {
             currentUser = null
@@ -250,6 +252,29 @@ object AuthManager {
                 }
         } catch (e: Exception) {
             Log.e("AuthManager", "Error in restoreProfileFromFirestore", e)
+            onComplete(false)
+        }
+    }
+
+    fun linkWithGoogle(context: Context, idToken: String, onComplete: (Boolean) -> Unit) {
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        val currentUser = auth.currentUser
+        if (currentUser != null) {
+            val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+            currentUser.linkWithCredential(credential)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        Log.d("AuthManager", "Successfully linked anonymous account with Google!")
+                        init(context)
+                        syncProfileToFirestore(context)
+                        onComplete(true)
+                    } else {
+                        Log.e("AuthManager", "Failed to link anonymous account with Google", task.exception)
+                        onComplete(false)
+                    }
+                }
+        } else {
+            Log.e("AuthManager", "No current user to link Google account to.")
             onComplete(false)
         }
     }

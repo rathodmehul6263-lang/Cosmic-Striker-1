@@ -494,12 +494,95 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun initializeAuthAndProfile() {
+        Log.d("MainActivity", "[AUDIT_FIREBASE] initializeAuthAndProfile() called on app startup.")
+        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        val currentUser = auth.currentUser
+
+        val handleSignIn = { firebaseUid: String ->
+            val currentLocalUid = prefs.getString("player_uid", null)
+            val name = prefs.getString("player_name", null)
+
+            if (currentLocalUid != firebaseUid) {
+                prefs.edit().putString("player_uid", firebaseUid).apply()
+            }
+
+            if (name == null) {
+                showAuthWelcomeScreen = true
+            } else {
+                showAuthWelcomeScreen = false
+                AuthManager.init(this)
+                AuthManager.restoreProfileFromFirestore(this, firebaseUid) { success ->
+                    damageUpgradeLevelState = prefs.getInt("upgrade_damage_level", damageUpgradeLevelState)
+                    fireRateUpgradeLevelState = prefs.getInt("upgrade_fire_rate", fireRateUpgradeLevelState)
+                    shieldUpgradeLevelState = prefs.getInt("upgrade_shield_level", shieldUpgradeLevelState)
+                    speedUpgradeLevelState = prefs.getInt("upgrade_speed_level", speedUpgradeLevelState)
+
+                    dailyStreakDayState = prefs.getInt("daily_streak_day", dailyStreakDayState)
+                    lastRewardClaimTimeState = prefs.getLong("last_reward_claim_time", lastRewardClaimTimeState)
+
+                    isExclusiveSkinUnlockedState = prefs.getBoolean("exclusive_skin_unlocked", isExclusiveSkinUnlockedState)
+                    isLegendarySkinUnlockedState = prefs.getBoolean("legendary_skin_unlocked", isLegendarySkinUnlockedState)
+                    isExclusiveSkinEnabledState = prefs.getBoolean("exclusive_skin_enabled", isExclusiveSkinEnabledState)
+                    isLegendarySkinEnabledState = prefs.getBoolean("legendary_skin_enabled", isLegendarySkinEnabledState)
+
+                    highestLevelState = prefs.getInt("highest_unlocked_level", highestLevelState)
+                    totalCoinsState = prefs.getInt("total_coins", totalCoinsState)
+                    totalKillsState = prefs.getInt("total_kills_stat", totalKillsState)
+                    gamesPlayedState = prefs.getInt("games_played_stat", gamesPlayedState)
+                    
+                    val eqShip = prefs.getString("equipped_ship_id", equippedShipIdState) ?: "falcon"
+                    equippedShipIdState = eqShip
+
+                    checkAchievements()
+                    checkDailyRewards()
+
+                    AuthManager.syncProfileToFirestore(this)
+                }
+            }
+        }
+
+        if (currentUser != null) {
+            Log.d("MainActivity", "[AUDIT_FIREBASE] User already authenticated on startup. UID: ${currentUser.uid}, Anonymous: ${currentUser.isAnonymous}")
+            handleSignIn(currentUser.uid)
+        } else {
+            Log.d("MainActivity", "[AUDIT_FIREBASE] No current user found. Executing FirebaseAuth.signInAnonymously().")
+            auth.signInAnonymously()
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        val user = task.result?.user
+                        if (user != null) {
+                            Log.d("MainActivity", "[AUDIT_FIREBASE] signInAnonymously() SUCCESS on startup. UID: ${user.uid}")
+                            handleSignIn(user.uid)
+                        }
+                    } else {
+                        Log.e("MainActivity", "[AUDIT_FIREBASE] signInAnonymously() FAILURE on startup.", task.exception)
+                        // Fallback: If anonymous sign-in fails (e.g. offline), we still let the game work!
+                        // This satisfies "Keep Guest Mode working"
+                        val existingUid = prefs.getString("player_uid", null) ?: (100000 + (Math.random() * 900000).toLong()).toString()
+                        if (prefs.getString("player_uid", null) == null) {
+                            prefs.edit().putString("player_uid", existingUid).apply()
+                        }
+                        val name = prefs.getString("player_name", null)
+                        if (name == null) {
+                            showAuthWelcomeScreen = true
+                        } else {
+                            showAuthWelcomeScreen = false
+                            AuthManager.init(this)
+                        }
+                    }
+                }
+        }
+    }
+
     fun registerPilot(displayName: String) {
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
-        val generatedUid = (100000 + (Math.random() * 900000).toLong()).toString()
+        val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
+        val uidToUse = firebaseUser?.uid ?: (prefs.getString("player_uid", null) ?: (100000 + (Math.random() * 900000).toLong()).toString())
         
         prefs.edit()
-            .putString("player_uid", generatedUid)
+            .putString("player_uid", uidToUse)
             .putString("player_name", displayName)
             .putInt("total_coins", 200)
             .putInt("highest_unlocked_level", 1)
@@ -724,6 +807,7 @@ class MainActivity : ComponentActivity() {
     }
 
     fun submitScoreToOnlineLeaderboard(score: Int, kills: Int) {
+        Log.d("MainActivity", "[AUDIT_FIREBASE] submitScoreToOnlineLeaderboard() called with score: $score, kills: $kills")
         val user = AuthManager.currentUser
         if (user != null) {
             val coins = getTotalCoins()
@@ -739,12 +823,14 @@ class MainActivity : ComponentActivity() {
                     newCoins = coins
                 )
                 if (result.isSuccess) {
-                    Log.d("MainActivity", "Score successfully uploaded to Firestore!")
+                    Log.d("MainActivity", "[AUDIT_FIREBASE] Score upload SUCCESS to collection 'leaderboard'. UID: ${user.id}, score: $score, kills: $kills")
                     updatePlayerGlobalRank(user.id, score)
                 } else {
-                    Log.e("MainActivity", "Score upload failed: ${result.exceptionOrNull()?.message}")
+                    Log.e("MainActivity", "[AUDIT_FIREBASE] Score upload FAILURE to collection 'leaderboard'. UID: ${user.id}, Exception: ", result.exceptionOrNull())
                 }
             }
+        } else {
+            Log.w("MainActivity", "[AUDIT_FIREBASE] submitScoreToOnlineLeaderboard() ignored: AuthManager.currentUser is null (player profile setup pending)")
         }
         AuthManager.syncProfileToFirestore(this)
     }
@@ -825,45 +911,8 @@ class MainActivity : ComponentActivity() {
         isExclusiveSkinEnabledState = prefs.getBoolean("exclusive_skin_enabled", false)
         isLegendarySkinEnabledState = prefs.getBoolean("legendary_skin_enabled", false)
 
-        // Check if custom player profile is created
-        val uid = prefs.getString("player_uid", null)
-        val name = prefs.getString("player_name", null)
-        if (uid == null || name == null) {
-            showAuthWelcomeScreen = true
-        } else {
-            showAuthWelcomeScreen = false
-            AuthManager.init(this)
-            
-            // Execute Cloud Restore & Merge
-            AuthManager.restoreProfileFromFirestore(this, uid) { success ->
-                damageUpgradeLevelState = prefs.getInt("upgrade_damage_level", damageUpgradeLevelState)
-                fireRateUpgradeLevelState = prefs.getInt("upgrade_fire_rate", fireRateUpgradeLevelState)
-                shieldUpgradeLevelState = prefs.getInt("upgrade_shield_level", shieldUpgradeLevelState)
-                speedUpgradeLevelState = prefs.getInt("upgrade_speed_level", speedUpgradeLevelState)
-
-                dailyStreakDayState = prefs.getInt("daily_streak_day", dailyStreakDayState)
-                lastRewardClaimTimeState = prefs.getLong("last_reward_claim_time", lastRewardClaimTimeState)
-
-                isExclusiveSkinUnlockedState = prefs.getBoolean("exclusive_skin_unlocked", isExclusiveSkinUnlockedState)
-                isLegendarySkinUnlockedState = prefs.getBoolean("legendary_skin_unlocked", isLegendarySkinUnlockedState)
-                isExclusiveSkinEnabledState = prefs.getBoolean("exclusive_skin_enabled", isExclusiveSkinEnabledState)
-                isLegendarySkinEnabledState = prefs.getBoolean("legendary_skin_enabled", isLegendarySkinEnabledState)
-
-                highestLevelState = prefs.getInt("highest_unlocked_level", highestLevelState)
-                totalCoinsState = prefs.getInt("total_coins", totalCoinsState)
-                totalKillsState = prefs.getInt("total_kills_stat", totalKillsState)
-                gamesPlayedState = prefs.getInt("games_played_stat", gamesPlayedState)
-                
-                val eqShip = prefs.getString("equipped_ship_id", equippedShipIdState) ?: "falcon"
-                equippedShipIdState = eqShip
-
-                // Perform checks
-                checkAchievements()
-                checkDailyRewards()
-
-                AuthManager.syncProfileToFirestore(this)
-            }
-        }
+        // Perform Firebase Anonymous Sign-In on startup if no user is signed in
+        initializeAuthAndProfile()
 
         // Hide Android System Bars (Status and Navigation) to provide true immersive arcade view
         window.decorView.systemUiVisibility = (
@@ -4609,6 +4658,30 @@ fun ProfileDialog(
 
     val context = androidx.compose.ui.platform.LocalContext.current
 
+    val googleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+            try {
+                val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                val idToken = account?.idToken
+                if (idToken != null) {
+                    AuthManager.linkWithGoogle(context, idToken) { success ->
+                        if (success) {
+                            android.widget.Toast.makeText(context, "Successfully linked Google account!", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            android.widget.Toast.makeText(context, "Google account linking failed.", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ProfileDialog", "Google Sign-In failed", e)
+                android.widget.Toast.makeText(context, "Google Sign-In failed: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     AlertDialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -4798,6 +4871,26 @@ fun ProfileDialog(
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("📋", fontSize = 10.sp)
                         }
+                        
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .background(Color(0xFF0C1033).copy(alpha = 0.5f), shape = RoundedCornerShape(6.dp))
+                                .border(BorderStroke(1.dp, Color(0xFF00F0FF).copy(alpha = 0.2f)), shape = RoundedCornerShape(6.dp))
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            val isAnonymous = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.isAnonymous == true
+                            val accountTypeStr = if (isAnonymous) "GUEST PILOT" else "SECURE GOOGLE PILOT"
+                            val accountIcon = if (isAnonymous) "👤" else "🛡️"
+                            Text(
+                                text = "$accountIcon $accountTypeStr",
+                                color = if (isAnonymous) Color.LightGray else Color(0xFFFFD700),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
                     }
                 }
 
@@ -4862,6 +4955,40 @@ fun ProfileDialog(
                     ) {
                         Text(text = "GAMES PLAYED:", color = Color.White, fontSize = 12.sp)
                         Text(text = "$gamesPlayed", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                }
+
+                if (com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.isAnonymous == true) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(
+                        onClick = {
+                            val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
+                                com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
+                            )
+                                .requestIdToken("942525706-5i2ku7qvrqk1a7brq4a9lvf1sik3k1pu.apps.googleusercontent.com")
+                                .requestEmail()
+                                .build()
+                            val googleSignInClient = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
+                            googleSignInClient.signOut().addOnCompleteListener {
+                                val signInIntent = googleSignInClient.signInIntent
+                                googleSignInLauncher.launch(signInIntent)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        border = BorderStroke(1.dp, Color(0xFFFFD700)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(40.dp)
+                            .testTag("link_google_button")
+                    ) {
+                        Text(
+                            text = "🔗 LINK GOOGLE ACCOUNT",
+                            color = Color(0xFFFFD700),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
                     }
                 }
             }

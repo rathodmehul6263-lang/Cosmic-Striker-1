@@ -95,13 +95,14 @@ class LeaderboardRepository(private val context: Context) {
     ): Result<Unit> = runCatching {
         if (uid.isEmpty()) throw IllegalArgumentException("User ID cannot be empty")
 
+        Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] uploadScoreAndDetails() writing to 'leaderboard' for UID: $uid, Name: $playerName, score: $newScore, kills: $newKills")
         val docRef = db.collection("leaderboard").document(uid)
 
         // Try to read document first (with default Firestore fallback behavior: checks local cache if offline)
         val snapshot = try {
             docRef.get().await()
         } catch (e: Exception) {
-            Log.e("LeaderboardRepository", "Read prior document error or offline: ${e.message}")
+            Log.e("LeaderboardRepository", "[AUDIT_FIREBASE] Read prior document error or offline: ${e.message}", e)
             null
         }
 
@@ -136,8 +137,13 @@ class LeaderboardRepository(private val context: Context) {
             "updatedAt" to FieldValue.serverTimestamp()
         )
 
-        docRef.set(data, SetOptions.merge()).await()
-        Log.d("LeaderboardRepository", "Successfully synchronized leaderboard for $playerName")
+        try {
+            docRef.set(data, SetOptions.merge()).await()
+            Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] Successfully synchronized leaderboard document in 'leaderboard' for $playerName")
+        } catch (e: Exception) {
+            Log.e("LeaderboardRepository", "[AUDIT_FIREBASE] Failed to set document in 'leaderboard' collection for $playerName. Exception: ", e)
+            throw e
+        }
     }
 
     /**
@@ -145,9 +151,24 @@ class LeaderboardRepository(private val context: Context) {
      * This query executes with O(k) complexity where k is the limit of 100 documents, scaling to millions.
      */
     suspend fun getTop100Leaderboard(): Result<List<LeaderboardUser>> = runCatching {
-        val querySnapshot = db.collection("leaderboard")
-            .get()
-            .await()
+        Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] getTop100Leaderboard() reading from collection 'leaderboard'")
+        val querySnapshot = try {
+            db.collection("leaderboard")
+                .get()
+                .await()
+        } catch (e: Exception) {
+            Log.e("LeaderboardRepository", "[AUDIT_FIREBASE] getTop100Leaderboard() read query failed: ", e)
+            throw e
+        }
+
+        Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] getTop100Leaderboard() read query completed. Document count: ${querySnapshot.size()}")
+        if (querySnapshot.isEmpty) {
+            Log.w("LeaderboardRepository", "[AUDIT_FIREBASE] getTop100Leaderboard() returned 0 documents! " +
+                    "Potential reasons: (1) No players have registered/completed a game yet, " +
+                    "(2) Firestore database holds no records in collection 'leaderboard', " +
+                    "(3) Security rules are blocking unauthorized read requests, or " +
+                    "(4) The client is offline and local cache is unpopulated.")
+        }
 
         val list = mutableListOf<LeaderboardUser>()
         querySnapshot.documents.forEach { doc ->
