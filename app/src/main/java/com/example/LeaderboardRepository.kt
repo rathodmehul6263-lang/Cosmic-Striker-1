@@ -93,10 +93,16 @@ class LeaderboardRepository(private val context: Context) {
         newLevel: Int,
         newCoins: Int
     ): Result<Unit> = runCatching {
-        if (uid.isEmpty()) throw IllegalArgumentException("User ID cannot be empty")
-
-        Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] uploadScoreAndDetails() writing to 'leaderboard' for UID: $uid, Name: $playerName, score: $newScore, kills: $newKills")
-        val docRef = db.collection("leaderboard").document(uid)
+        val firebaseAuth = com.google.firebase.auth.FirebaseAuth.getInstance()
+        val currentUser = firebaseAuth.currentUser
+        if (currentUser == null) {
+            val ex = IllegalStateException("No authenticated Firebase user found! Cannot upload score to Firestore.")
+            Log.e("LeaderboardRepository", "[AUDIT_FIREBASE] uploadScoreAndDetails() ERROR: No authenticated Firebase user found! Cannot upload.", ex)
+            throw ex
+        }
+        val resolvedUid = currentUser.uid
+        Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] uploadScoreAndDetails() writing to 'leaderboard' for UID: $resolvedUid, Name: $playerName, score: $newScore, kills: $newKills")
+        val docRef = db.collection("leaderboard").document(resolvedUid)
 
         // Try to read document first (with default Firestore fallback behavior: checks local cache if offline)
         val snapshot = try {
@@ -124,7 +130,7 @@ class LeaderboardRepository(private val context: Context) {
         }
 
         val data = hashMapOf<String, Any?>(
-            "uid" to uid,
+            "uid" to resolvedUid,
             "playerName" to playerName,
             "displayName" to playerName, // Backward compatibility with existing UI
             "kills" to finalKills,
@@ -134,14 +140,15 @@ class LeaderboardRepository(private val context: Context) {
             "level" to finalLevel,
             "highestLevel" to finalLevel, // Backward compatibility
             "coins" to finalCoins,
+            "timestamp" to System.currentTimeMillis(),
             "updatedAt" to FieldValue.serverTimestamp()
         )
 
         try {
             docRef.set(data, SetOptions.merge()).await()
-            Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] Successfully synchronized leaderboard document in 'leaderboard' for $playerName")
+            Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] Firestore upload SUCCESS to collection 'leaderboard' for UID: $resolvedUid, name: $playerName")
         } catch (e: Exception) {
-            Log.e("LeaderboardRepository", "[AUDIT_FIREBASE] Failed to set document in 'leaderboard' collection for $playerName. Exception: ", e)
+            Log.e("LeaderboardRepository", "[AUDIT_FIREBASE] Firestore upload FAILURE to collection 'leaderboard' for UID: $resolvedUid, Exception: ", e)
             throw e
         }
     }

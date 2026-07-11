@@ -80,6 +80,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlinx.coroutines.tasks.await
 
 enum class GameScreen {
     MENU,
@@ -341,6 +342,10 @@ class MainActivity : ComponentActivity() {
             completedMissionsCount = 0
             showInterstitialAd()
         }
+
+        // Upload leaderboard data and details after every completed mission/level
+        val currentHighScore = leaderboardManager.getHighScore()
+        submitScoreToOnlineLeaderboard(currentHighScore, totalKillsState)
     }
 
     fun isSectorCompletedAndRewarded(level: Int): Boolean {
@@ -539,6 +544,7 @@ class MainActivity : ComponentActivity() {
                     checkDailyRewards()
 
                     AuthManager.syncProfileToFirestore(this)
+                    refreshOnlineTopScores()
                 }
             }
         }
@@ -570,6 +576,7 @@ class MainActivity : ComponentActivity() {
                         } else {
                             showAuthWelcomeScreen = false
                             AuthManager.init(this)
+                            refreshOnlineTopScores()
                         }
                     }
                 }
@@ -577,29 +584,49 @@ class MainActivity : ComponentActivity() {
     }
 
     fun registerPilot(displayName: String) {
-        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
-        val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
-        val uidToUse = firebaseUser?.uid ?: (prefs.getString("player_uid", null) ?: (100000 + (Math.random() * 900000).toLong()).toString())
-        
-        prefs.edit()
-            .putString("player_uid", uidToUse)
-            .putString("player_name", displayName)
-            .putInt("total_coins", 200)
-            .putInt("highest_unlocked_level", 1)
-            .putInt("total_kills_stat", 0)
-            .putInt("games_played_stat", 0)
-            .apply()
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.Main) {
+            val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+            val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+            var firebaseUser = auth.currentUser
+            if (firebaseUser == null) {
+                Log.d("MainActivity", "[AUDIT_FIREBASE] registerPilot: FirebaseAuth currentUser is null. Initiating and waiting for anonymous sign-in...")
+                try {
+                    auth.signInAnonymously().await()
+                    firebaseUser = auth.currentUser
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "[AUDIT_FIREBASE] registerPilot: Failed to sign in anonymously while waiting.", e)
+                }
+            }
 
-        highestLevelState = 1
-        totalCoinsState = 200
-        gamesPlayedState = 0
-        totalKillsState = 0
+            val uidToUse = firebaseUser?.uid
+            if (uidToUse == null) {
+                Log.e("MainActivity", "[AUDIT_FIREBASE] registerPilot: Critical error. Firebase user remains null. Cannot register pilot online safely.")
+            } else {
+                Log.d("MainActivity", "[AUDIT_FIREBASE] registerPilot: Firebase UID resolved successfully: $uidToUse")
+            }
 
-        AuthManager.init(this)
-        AuthManager.syncProfileToFirestore(this)
+            val finalUid = uidToUse ?: (prefs.getString("player_uid", null) ?: (100000 + (Math.random() * 900000).toLong()).toString())
 
-        showBonusPopup = true
-        showAuthWelcomeScreen = false
+            prefs.edit()
+                .putString("player_uid", finalUid)
+                .putString("player_name", displayName)
+                .putInt("total_coins", 200)
+                .putInt("highest_unlocked_level", 1)
+                .putInt("total_kills_stat", 0)
+                .putInt("games_played_stat", 0)
+                .apply()
+
+            highestLevelState = 1
+            totalCoinsState = 200
+            gamesPlayedState = 0
+            totalKillsState = 0
+
+            AuthManager.init(this@MainActivity)
+            AuthManager.syncProfileToFirestore(this@MainActivity)
+
+            showBonusPopup = true
+            showAuthWelcomeScreen = false
+        }
     }
 
     fun updatePilotName(newName: String) {
@@ -808,14 +835,39 @@ class MainActivity : ComponentActivity() {
 
     fun submitScoreToOnlineLeaderboard(score: Int, kills: Int) {
         Log.d("MainActivity", "[AUDIT_FIREBASE] submitScoreToOnlineLeaderboard() called with score: $score, kills: $kills")
-        val user = AuthManager.currentUser
-        if (user != null) {
-            val coins = getTotalCoins()
-            val level = highestLevelState
-            lifecycleScope.launch {
+        val coins = getTotalCoins()
+        val level = highestLevelState
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+            var firebaseUser = auth.currentUser
+            if (firebaseUser == null) {
+                Log.d("MainActivity", "[AUDIT_FIREBASE] submitScoreToOnlineLeaderboard: FirebaseAuth currentUser is null. Waiting for anonymous sign-in...")
+                try {
+                    auth.signInAnonymously().await()
+                    firebaseUser = auth.currentUser
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "[AUDIT_FIREBASE] submitScoreToOnlineLeaderboard: Failed to sign in anonymously while waiting.", e)
+                }
+            }
+
+            if (firebaseUser == null) {
+                Log.e("MainActivity", "[AUDIT_FIREBASE] submitScoreToOnlineLeaderboard ERROR: No authenticated Firebase user available! Aborting upload.")
+                return@launch
+            }
+
+            val resolvedUid = firebaseUser.uid
+            Log.d("MainActivity", "[AUDIT_FIREBASE] submitScoreToOnlineLeaderboard: Authentication completed. UID: $resolvedUid")
+
+            // Ensure AuthManager is updated with correct UID on Main thread
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                AuthManager.init(this@MainActivity)
+            }
+
+            val user = AuthManager.currentUser
+            if (user != null) {
                 val repository = LeaderboardRepository(this@MainActivity)
                 val result = repository.uploadScoreAndDetails(
-                    uid = user.id,
+                    uid = resolvedUid,
                     playerName = user.name,
                     newKills = kills,
                     newScore = score,
@@ -823,16 +875,38 @@ class MainActivity : ComponentActivity() {
                     newCoins = coins
                 )
                 if (result.isSuccess) {
-                    Log.d("MainActivity", "[AUDIT_FIREBASE] Score upload SUCCESS to collection 'leaderboard'. UID: ${user.id}, score: $score, kills: $kills")
-                    updatePlayerGlobalRank(user.id, score)
+                    Log.d("MainActivity", "[AUDIT_FIREBASE] Score upload SUCCESS to collection 'leaderboard'. UID: $resolvedUid, score: $score, kills: $kills")
+                    updatePlayerGlobalRank(resolvedUid, score)
+                    refreshOnlineTopScores()
                 } else {
-                    Log.e("MainActivity", "[AUDIT_FIREBASE] Score upload FAILURE to collection 'leaderboard'. UID: ${user.id}, Exception: ", result.exceptionOrNull())
+                    Log.e("MainActivity", "[AUDIT_FIREBASE] Score upload FAILURE to collection 'leaderboard'. UID: $resolvedUid, Exception: ", result.exceptionOrNull())
                 }
+            } else {
+                Log.w("MainActivity", "[AUDIT_FIREBASE] submitScoreToOnlineLeaderboard() ignored: Player has not registered a profile name yet.")
             }
-        } else {
-            Log.w("MainActivity", "[AUDIT_FIREBASE] submitScoreToOnlineLeaderboard() ignored: AuthManager.currentUser is null (player profile setup pending)")
         }
         AuthManager.syncProfileToFirestore(this)
+    }
+
+    fun refreshOnlineTopScores() {
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val repository = LeaderboardRepository(this@MainActivity)
+            val result = repository.getTop100Leaderboard()
+            if (result.isSuccess) {
+                val list = result.getOrThrow().map { user ->
+                    LeaderboardEntry(
+                        score = user.score,
+                        timestamp = user.updatedAt?.time ?: System.currentTimeMillis()
+                    )
+                }
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    leaderboardList = list
+                    Log.d("MainActivity", "[AUDIT_FIREBASE] Loaded ${list.size} online leaderboard entries for UI. Local fallback bypassed.")
+                }
+            } else {
+                Log.e("MainActivity", "[AUDIT_FIREBASE] Failed to load online leaderboard entries.", result.exceptionOrNull())
+            }
+        }
     }
 
     fun updateWebViewRank(rank: String) {
@@ -843,6 +917,8 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
+        com.google.firebase.FirebaseApp.initializeApp(this)
+        Log.d("MainActivity", "[AUDIT_FIREBASE] FirebaseApp.initializeApp(this) executed successfully on startup.")
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
