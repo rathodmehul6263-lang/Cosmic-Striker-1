@@ -165,8 +165,8 @@ class LeaderboardAdapter(
 
             nameTextView.text = user.playerName
             uidTextView.text = "UID: ${user.uid}"
-            levelTextView.text = "Level: ${user.level}"
-            killsTextView.text = "Kills: ${user.kills}"
+            levelTextView.text = "Score: ${user.score}"
+            killsTextView.text = "Lvl ${user.level} | Kills: ${user.kills}"
         }
     }
 

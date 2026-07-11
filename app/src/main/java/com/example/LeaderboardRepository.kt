@@ -105,36 +105,39 @@ class LeaderboardRepository(private val context: Context) {
             null
         }
 
-        var shouldUpdate = true
+        var finalScore = newScore
+        var finalKills = newKills
+        var finalLevel = newLevel
+        var finalCoins = newCoins
+
         if (snapshot != null && snapshot.exists()) {
             val existingKills = snapshot.getLong("kills")?.toInt() ?: snapshot.getLong("totalKills")?.toInt() ?: 0
             val existingScore = snapshot.getLong("score")?.toInt() ?: snapshot.getLong("highestScore")?.toInt() ?: 0
+            val existingLevel = snapshot.getLong("level")?.toInt() ?: snapshot.getLong("highestLevel")?.toInt() ?: 1
+            val existingCoins = snapshot.getLong("coins")?.toInt() ?: 0
 
-            // Conditional update requirement check
-            if (newScore <= existingScore && newKills <= existingKills) {
-                shouldUpdate = false
-                Log.d("LeaderboardRepository", "Stats not higher than existing record. Skipping Firestore upload.")
-            }
+            finalScore = maxOf(existingScore, newScore)
+            finalKills = maxOf(existingKills, newKills)
+            finalLevel = maxOf(existingLevel, newLevel)
+            finalCoins = maxOf(existingCoins, newCoins)
         }
 
-        if (shouldUpdate) {
-            val data = hashMapOf<String, Any?>(
-                "uid" to uid,
-                "playerName" to playerName,
-                "displayName" to playerName, // Backward compatibility with existing UI
-                "kills" to newKills,
-                "totalKills" to newKills, // Backward compatibility
-                "score" to newScore,
-                "highestScore" to newScore, // Backward compatibility
-                "level" to newLevel,
-                "highestLevel" to newLevel, // Backward compatibility
-                "coins" to newCoins,
-                "updatedAt" to FieldValue.serverTimestamp()
-            )
+        val data = hashMapOf<String, Any?>(
+            "uid" to uid,
+            "playerName" to playerName,
+            "displayName" to playerName, // Backward compatibility with existing UI
+            "kills" to finalKills,
+            "totalKills" to finalKills, // Backward compatibility
+            "score" to finalScore,
+            "highestScore" to finalScore, // Backward compatibility
+            "level" to finalLevel,
+            "highestLevel" to finalLevel, // Backward compatibility
+            "coins" to finalCoins,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
 
-            docRef.set(data, SetOptions.merge()).await()
-            Log.d("LeaderboardRepository", "Successfully synchronized leaderboard for $playerName")
-        }
+        docRef.set(data, SetOptions.merge()).await()
+        Log.d("LeaderboardRepository", "Successfully synchronized leaderboard for $playerName")
     }
 
     /**
@@ -143,13 +146,11 @@ class LeaderboardRepository(private val context: Context) {
      */
     suspend fun getTop100Leaderboard(): Result<List<LeaderboardUser>> = runCatching {
         val querySnapshot = db.collection("leaderboard")
-            .orderBy("kills", Query.Direction.DESCENDING)
-            .limit(100)
             .get()
             .await()
 
         val list = mutableListOf<LeaderboardUser>()
-        querySnapshot.documents.forEachIndexed { index, doc ->
+        querySnapshot.documents.forEach { doc ->
             val uid = doc.getString("uid") ?: doc.id
             val name = doc.getString("playerName") ?: doc.getString("displayName") ?: "Unknown Pilot"
             val kills = doc.getLong("kills")?.toInt() ?: doc.getLong("totalKills")?.toInt() ?: 0
@@ -161,7 +162,7 @@ class LeaderboardRepository(private val context: Context) {
 
             list.add(
                 LeaderboardUser(
-                    rank = index + 1,
+                    rank = 0,
                     uid = uid,
                     playerName = name,
                     kills = kills,
@@ -173,25 +174,35 @@ class LeaderboardRepository(private val context: Context) {
                 )
             )
         }
-        list
+
+        // Sort descending by score, then by kills, then by level
+        val sorted = list.sortedWith(
+            compareByDescending<LeaderboardUser> { it.score }
+                .thenByDescending { it.kills }
+                .thenByDescending { it.level }
+        ).mapIndexed { index, user ->
+            user.copy(rank = index + 1)
+        }.take(100)
+
+        sorted
     }
 
     /**
      * Calculate global rank using an aggregation query without fetching documents.
      * Scales efficiently to millions of players.
      */
-    suspend fun getPlayerGlobalRank(userKills: Int): Result<Int> = runCatching {
-        if (userKills < 0) return Result.success(0)
+    suspend fun getPlayerGlobalRank(userScore: Int): Result<Int> = runCatching {
+        if (userScore < 0) return Result.success(0)
 
-        // Count of documents where kills > player's kills
+        // Count of documents where highestScore > player's score
         val countQuery = db.collection("leaderboard")
-            .whereGreaterThan("kills", userKills)
+            .whereGreaterThan("highestScore", userScore)
             .count()
 
         val countSnapshot = countQuery.get(AggregateSource.SERVER).await()
         val higherCount = countSnapshot.count
 
-        // Rank = number of players with strictly higher kills + 1
+        // Rank = number of players with strictly higher score + 1
         (higherCount + 1).toInt()
     }
 }

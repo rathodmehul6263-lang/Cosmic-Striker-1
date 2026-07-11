@@ -169,15 +169,16 @@ class LeaderboardManager(context: Context) {
 
                     for (document in result) {
                         val uid = document.id
-                        val level = document.getLong("highestLevel") ?: 1L
-                        val kills = document.getLong("totalKills") ?: 0L
+                        val level = document.getLong("highestLevel") ?: document.getLong("level") ?: 1L
+                        val kills = document.getLong("totalKills") ?: document.getLong("kills") ?: 0L
+                        val score = document.getLong("score") ?: document.getLong("highestScore") ?: 0L
                         val coins = document.getLong("coins") ?: 0L
 
                         if (uid == userId) {
                             existsInFirebase = true
                         }
 
-                        list.add(RankCalculationEntry(uid, level, kills, coins))
+                        list.add(RankCalculationEntry(uid, score, kills, level, coins))
                     }
 
                     // Only show "--" if the player record truly does not exist in Firebase
@@ -188,13 +189,13 @@ class LeaderboardManager(context: Context) {
                     }
 
                     // Sort locally based on requirements:
-                    // 1. Highest Level (descending)
+                    // 1. Highest Score (descending)
                     // 2. Total Kills (descending)
-                    // 3. Highest Coins (descending)
+                    // 3. Highest Level (descending)
                     val sortedList = list.sortedWith(
-                        compareByDescending<RankCalculationEntry> { it.highestLevel }
+                        compareByDescending<RankCalculationEntry> { it.highestScore }
                             .thenByDescending { it.totalKills }
-                            .thenByDescending { it.coins }
+                            .thenByDescending { it.highestLevel }
                     )
 
                     val rankIndex = sortedList.indexOfFirst { it.uid == userId }
@@ -228,7 +229,8 @@ class LeaderboardManager(context: Context) {
 
 data class RankCalculationEntry(
     val uid: String,
-    val highestLevel: Long,
+    val highestScore: Long,
     val totalKills: Long,
+    val highestLevel: Long,
     val coins: Long
 )

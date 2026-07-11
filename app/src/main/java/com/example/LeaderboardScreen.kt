@@ -62,9 +62,8 @@ fun LeaderboardScreen(
                         val rankStr = if (currentUserEntry != null) {
                             "#${currentUserEntry.rank}"
                         } else {
-                            val prefs = context.getSharedPreferences("cosmic_striker_prefs", android.content.Context.MODE_PRIVATE)
-                            val userKills = prefs.getInt("total_kills_stat", 0)
-                            val rankResult = repository.getPlayerGlobalRank(userKills)
+                            val userScore = LeaderboardManager(context).getHighScore()
+                            val rankResult = repository.getPlayerGlobalRank(userScore)
                             if (rankResult.isSuccess) {
                                 "#${rankResult.getOrThrow()}"
                             } else {

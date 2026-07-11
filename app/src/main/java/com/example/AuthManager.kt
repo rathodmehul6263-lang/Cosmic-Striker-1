@@ -96,6 +96,7 @@ object AuthManager {
         val totalCoins = prefs.getInt("total_coins", 0)
         val totalKills = prefs.getInt("total_kills_stat", 0)
         val gamesPlayed = prefs.getInt("games_played_stat", 0)
+        val highestScore = LeaderboardManager(context).getHighScore()
 
         val ownedShipsStr = prefs.getString("owned_ships_csv", "falcon") ?: "falcon"
         val unlockedShipsList = ownedShipsStr.split(",").filter { it.isNotEmpty() }
@@ -130,9 +131,14 @@ object AuthManager {
             
             val data = hashMapOf<String, Any?>(
                 "uid" to uid,
+                "playerName" to name,
                 "displayName" to name,
-                "highestLevel" to highestLevel.toLong(),
+                "score" to highestScore.toLong(),
+                "highestScore" to highestScore.toLong(),
+                "kills" to totalKills.toLong(),
                 "totalKills" to totalKills.toLong(),
+                "level" to highestLevel.toLong(),
+                "highestLevel" to highestLevel.toLong(),
                 "coins" to totalCoins.toLong(),
                 "gamesPlayed" to gamesPlayed.toLong(),
                 "profilePictureBase64" to base64Pic,

@@ -708,10 +708,10 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    fun updatePlayerGlobalRank(userId: String, kills: Int) {
+    fun updatePlayerGlobalRank(userId: String, score: Int) {
         lifecycleScope.launch {
             val repository = LeaderboardRepository(this@MainActivity)
-            val result = repository.getPlayerGlobalRank(kills)
+            val result = repository.getPlayerGlobalRank(score)
             if (result.isSuccess) {
                 val rankVal = result.getOrThrow()
                 val rankStr = if (rankVal > 0) "#$rankVal" else "--"
@@ -740,7 +740,7 @@ class MainActivity : ComponentActivity() {
                 )
                 if (result.isSuccess) {
                     Log.d("MainActivity", "Score successfully uploaded to Firestore!")
-                    updatePlayerGlobalRank(user.id, kills)
+                    updatePlayerGlobalRank(user.id, score)
                 } else {
                     Log.e("MainActivity", "Score upload failed: ${result.exceptionOrNull()?.message}")
                 }
@@ -777,15 +777,15 @@ class MainActivity : ComponentActivity() {
         AuthManager.onSyncSuccess = {
             val pUid = prefs.getString("player_uid", null)
             if (pUid != null) {
-                val userKills = prefs.getInt("total_kills_stat", 0)
-                updatePlayerGlobalRank(pUid, userKills)
+                val userScore = leaderboardManager.getHighScore()
+                updatePlayerGlobalRank(pUid, userScore)
             }
         }
         
         val pUid = prefs.getString("player_uid", null)
         if (pUid != null) {
-            val userKills = prefs.getInt("total_kills_stat", 0)
-            updatePlayerGlobalRank(pUid, userKills)
+            val userScore = leaderboardManager.getHighScore()
+            updatePlayerGlobalRank(pUid, userScore)
         }
         soundEffectsEnabledState = prefs.getBoolean("settings_sound_effects", true)
         musicEnabledState = prefs.getBoolean("settings_music", true)
@@ -1022,12 +1022,9 @@ class MainActivity : ComponentActivity() {
                                         playClickSound()
                                         val pUid = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE).getString("player_uid", null)
                                         if (pUid != null) {
-                                            val userKills = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE).getInt("total_kills_stat", 0)
-                                            updatePlayerGlobalRank(pUid, userKills)
+                                            val userScore = leaderboardManager.getHighScore()
+                                            updatePlayerGlobalRank(pUid, userScore)
                                         }
-                                         if (false) {
-                                             val dummy = pUid
-                                         }
                                         showProfileDialog = true
                                     },
                                     playerRank = playerRankState,
