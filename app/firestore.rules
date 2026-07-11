@@ -1,0 +1,12 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /leaderboard/{userId} {
+      // Allow global online read access for everyone
+      allow read: if true;
+
+      // Allow write access only if the client is authenticated and editing their own record matching their Firebase UID
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

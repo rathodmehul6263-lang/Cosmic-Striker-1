@@ -1,6 +1,7 @@
 package com.example
 
 import android.util.Log
+import kotlinx.coroutines.launch
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -30,17 +31,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.FirebaseFirestore
 
-data class OnlineLeaderboardEntry(
-    val rank: Int,
-    val userId: String,
-    val displayName: String,
-    val highestLevel: Long,
-    val totalKills: Long,
-    val coins: Long,
-    val profilePictureBase64: String?,
-    val isCurrentUser: Boolean
-)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LeaderboardScreen(
@@ -49,66 +39,37 @@ fun LeaderboardScreen(
     onRankCalculated: ((String) -> Unit)? = null
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
-    var leaderboardEntries by remember { mutableStateOf<List<OnlineLeaderboardEntry>>(emptyList()) }
+    var leaderboardEntries by remember { mutableStateOf<List<LeaderboardUser>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    val repository = remember { LeaderboardRepository(context) }
 
     // Fetch from Firestore and sort locally in memory to support tie-breakers perfectly without custom indexes
     fun fetchLeaderboard() {
         isLoading = true
         errorMessage = null
-        try {
-            val db = FirebaseFirestore.getInstance()
-            db.collection("leaderboard")
-                .get()
-                .addOnSuccessListener { result ->
-                    val list = mutableListOf<OnlineLeaderboardEntry>()
-                    for (document in result) {
-                        val uid = document.id
-                        val name = document.getString("displayName") ?: "Unknown Pilot"
-                        val level = document.getLong("highestLevel") ?: 1L
-                        val kills = document.getLong("totalKills") ?: 0L
-                        val coinsValue = document.getLong("coins") ?: 0L
-                        val base64Pic = document.getString("profilePictureBase64")
-                        val isCurrent = (currentUserId != null && uid == currentUserId)
-                        
-                        list.add(
-                            OnlineLeaderboardEntry(
-                                rank = 0, // Calculated after sorting
-                                userId = uid,
-                                displayName = name,
-                                highestLevel = level,
-                                totalKills = kills,
-                                coins = coinsValue,
-                                profilePictureBase64 = base64Pic,
-                                isCurrentUser = isCurrent
-                            )
-                        )
-                    }
-                    
-                    // Sort locally based on requirements:
-                    // 1. Highest Level (descending)
-                    // 2. Total Kills (descending)
-                    // 3. Highest Coins (descending) - as tie-breaker
-                    val comparator = compareByDescending<OnlineLeaderboardEntry> { it.highestLevel }
-                        .thenByDescending { it.totalKills }
-                        .thenByDescending { it.coins }
-
-                    val sortedList = list.sortedWith(comparator)
-                        .mapIndexed { index, entry ->
-                            entry.copy(rank = index + 1)
-                        }
-
-                    leaderboardEntries = sortedList
+        scope.launch {
+            try {
+                val result = repository.getTop100Leaderboard()
+                if (result.isSuccess) {
+                    val list = result.getOrThrow()
+                    leaderboardEntries = list
                     isLoading = false
 
-                    // Sync the calculated rank of the logged-in user to the shared state and preferences
                     if (currentUserId != null) {
-                        val currentUserEntry = sortedList.firstOrNull { it.userId == currentUserId }
+                        val currentUserEntry = list.firstOrNull { it.uid == currentUserId }
                         val rankStr = if (currentUserEntry != null) {
                             "#${currentUserEntry.rank}"
                         } else {
-                            "--"
+                            val prefs = context.getSharedPreferences("cosmic_striker_prefs", android.content.Context.MODE_PRIVATE)
+                            val userKills = prefs.getInt("total_kills_stat", 0)
+                            val rankResult = repository.getPlayerGlobalRank(userKills)
+                            if (rankResult.isSuccess) {
+                                "#${rankResult.getOrThrow()}"
+                            } else {
+                                "--"
+                            }
                         }
                         if (rankStr != "--") {
                             val prefs = context.getSharedPreferences("cosmic_striker_prefs", android.content.Context.MODE_PRIVATE)
@@ -116,16 +77,15 @@ fun LeaderboardScreen(
                             onRankCalculated?.invoke(rankStr)
                         }
                     }
-                }
-                .addOnFailureListener { e ->
-                    Log.e("LeaderboardScreen", "Error reading online leaderboard", e)
-                    errorMessage = e.message ?: "Failed to connect to the cosmic network."
+                } else {
+                    errorMessage = result.exceptionOrNull()?.message ?: "Failed to connect to the cosmic network."
                     isLoading = false
                 }
-        } catch (e: Exception) {
-            Log.e("LeaderboardScreen", "Firestore exception in fetchLeaderboard", e)
-            errorMessage = e.message ?: "An unexpected cosmic anomaly occurred."
-            isLoading = false
+            } catch (e: Exception) {
+                Log.e("LeaderboardScreen", "Firestore exception in fetchLeaderboard", e)
+                errorMessage = e.message ?: "An unexpected cosmic anomaly occurred."
+                isLoading = false
+            }
         }
     }
 
@@ -208,7 +168,7 @@ fun LeaderboardScreen(
             // Sub-headline / Connection Status info
             val activeUser = AuthManager.currentUser
             if (activeUser != null) {
-                val currentUserEntry = leaderboardEntries.firstOrNull { it.isCurrentUser }
+                val currentUserEntry = leaderboardEntries.firstOrNull { it.uid == currentUserId }
                 val personalRankText = if (isLoading) {
                     "Loading..."
                 } else if (currentUserEntry != null) {
@@ -354,7 +314,7 @@ fun LeaderboardScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(leaderboardEntries) { entry ->
-                            OnlineLeaderboardRow(entry = entry)
+                            OnlineLeaderboardRow(entry = entry, currentUserId = currentUserId)
                         }
                     }
                 }
@@ -386,7 +346,8 @@ fun LeaderboardScreen(
 }
 
 @Composable
-fun OnlineLeaderboardRow(entry: OnlineLeaderboardEntry) {
+fun OnlineLeaderboardRow(entry: LeaderboardUser, currentUserId: String?) {
+    val isCurrentUser = !currentUserId.isNullOrEmpty() && entry.uid == currentUserId
     val rankColor = when (entry.rank) {
         1 -> Color(0xFFFFD700) // Gold
         2 -> Color(0xFFC0C0C0) // Silver
@@ -406,7 +367,7 @@ fun OnlineLeaderboardRow(entry: OnlineLeaderboardEntry) {
         2 -> BorderStroke(1.5.dp, Brush.horizontalGradient(listOf(Color(0xFFC0C0C0), Color(0xFFE2E8F0)))) // Silver Glow
         3 -> BorderStroke(1.5.dp, Brush.horizontalGradient(listOf(Color(0xFFCD7F32), Color(0xFFB45309)))) // Bronze Glow
         else -> {
-            if (entry.isCurrentUser) {
+            if (isCurrentUser) {
                 BorderStroke(1.5.dp, Brush.linearGradient(listOf(Color(0xFF00F0FF), Color(0xFFFF0080))))
             } else {
                 BorderStroke(1.dp, Color(0x11FFFFFF))
@@ -419,7 +380,7 @@ fun OnlineLeaderboardRow(entry: OnlineLeaderboardEntry) {
         2 -> Brush.horizontalGradient(listOf(Color(0x22C0C0C0), Color(0x0FE2E8F0)))
         3 -> Brush.horizontalGradient(listOf(Color(0x22CD7F32), Color(0x0FB45309)))
         else -> {
-            if (entry.isCurrentUser) {
+            if (isCurrentUser) {
                 Brush.horizontalGradient(listOf(Color(0x3300F0FF), Color(0x33FF0080)))
             } else {
                 Brush.horizontalGradient(listOf(Color(0x0AFFFFFF), Color(0x02FFFFFF)))
@@ -491,16 +452,16 @@ fun OnlineLeaderboardRow(entry: OnlineLeaderboardEntry) {
             // Player Details (Name, UID)
             Column {
                 Text(
-                    text = entry.displayName,
-                    color = if (entry.isCurrentUser) Color(0xFF00F0FF) else Color.White,
-                    fontWeight = if (entry.isCurrentUser) FontWeight.ExtraBold else FontWeight.Bold,
+                    text = entry.playerName,
+                    color = if (isCurrentUser) Color(0xFF00F0FF) else Color.White,
+                    fontWeight = if (isCurrentUser) FontWeight.ExtraBold else FontWeight.Bold,
                     fontSize = 15.sp,
                     fontFamily = FontFamily.SansSerif,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "UID: ${entry.userId}",
+                    text = "UID: ${entry.uid}",
                     color = Color.Gray,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace
@@ -514,14 +475,14 @@ fun OnlineLeaderboardRow(entry: OnlineLeaderboardEntry) {
             verticalArrangement = Arrangement.Center
         ) {
             Text(
-                text = "Level: ${entry.highestLevel}",
+                text = "Level: ${entry.level}",
                 color = Color(0xFF00F0FF),
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
                 fontFamily = FontFamily.Monospace
             )
             Text(
-                text = "Kills: ${entry.totalKills}",
+                text = "Kills: ${entry.kills}",
                 color = Color(0xFFFF0080),
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp,

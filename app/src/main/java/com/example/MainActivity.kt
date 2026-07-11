@@ -74,6 +74,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
 import coil.compose.AsyncImage
+import androidx.lifecycle.lifecycleScope
 import com.example.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -707,17 +708,43 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    fun updatePlayerGlobalRank(userId: String, kills: Int) {
+        lifecycleScope.launch {
+            val repository = LeaderboardRepository(this@MainActivity)
+            val result = repository.getPlayerGlobalRank(kills)
+            if (result.isSuccess) {
+                val rankVal = result.getOrThrow()
+                val rankStr = if (rankVal > 0) "#$rankVal" else "--"
+                playerRankState = rankStr
+                val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+                prefs.edit().putString("cached_global_rank", rankStr).apply()
+                updateWebViewRank(rankStr)
+            }
+        }
+    }
+
     fun submitScoreToOnlineLeaderboard(score: Int, kills: Int) {
         val user = AuthManager.currentUser
         if (user != null) {
             val coins = getTotalCoins()
-            leaderboardManager.updateOnlineLeaderboard(
-                userId = user.id,
-                displayName = user.name,
-                newScore = score,
-                killsEarned = kills,
-                currentCoins = coins
-            )
+            val level = highestLevelState
+            lifecycleScope.launch {
+                val repository = LeaderboardRepository(this@MainActivity)
+                val result = repository.uploadScoreAndDetails(
+                    uid = user.id,
+                    playerName = user.name,
+                    newKills = kills,
+                    newScore = score,
+                    newLevel = level,
+                    newCoins = coins
+                )
+                if (result.isSuccess) {
+                    Log.d("MainActivity", "Score successfully uploaded to Firestore!")
+                    updatePlayerGlobalRank(user.id, kills)
+                } else {
+                    Log.e("MainActivity", "Score upload failed: ${result.exceptionOrNull()?.message}")
+                }
+            }
         }
         AuthManager.syncProfileToFirestore(this)
     }
@@ -745,24 +772,20 @@ class MainActivity : ComponentActivity() {
 
         // Load settings permanently from local storage (SharedPreferences)
         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
-        playerRankState = leaderboardManager.getCachedRank()
+        playerRankState = prefs.getString("cached_global_rank", "--") ?: "--"
 
         AuthManager.onSyncSuccess = {
             val pUid = prefs.getString("player_uid", null)
             if (pUid != null) {
-                leaderboardManager.fetchAndCacheGlobalRank(pUid, forceRefresh = true) { rankStr ->
-                    playerRankState = rankStr
-                    updateWebViewRank(rankStr)
-                }
+                val userKills = prefs.getInt("total_kills_stat", 0)
+                updatePlayerGlobalRank(pUid, userKills)
             }
         }
         
         val pUid = prefs.getString("player_uid", null)
         if (pUid != null) {
-            leaderboardManager.fetchAndCacheGlobalRank(pUid, forceRefresh = true) { rankStr ->
-                playerRankState = rankStr
-                updateWebViewRank(rankStr)
-            }
+            val userKills = prefs.getInt("total_kills_stat", 0)
+            updatePlayerGlobalRank(pUid, userKills)
         }
         soundEffectsEnabledState = prefs.getBoolean("settings_sound_effects", true)
         musicEnabledState = prefs.getBoolean("settings_music", true)
@@ -999,11 +1022,12 @@ class MainActivity : ComponentActivity() {
                                         playClickSound()
                                         val pUid = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE).getString("player_uid", null)
                                         if (pUid != null) {
-                                            leaderboardManager.fetchAndCacheGlobalRank(pUid, forceRefresh = true) { rankStr ->
-                                                playerRankState = rankStr
-                                                updateWebViewRank(rankStr)
-                                            }
+                                            val userKills = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE).getInt("total_kills_stat", 0)
+                                            updatePlayerGlobalRank(pUid, userKills)
                                         }
+                                         if (false) {
+                                             val dummy = pUid
+                                         }
                                         showProfileDialog = true
                                     },
                                     playerRank = playerRankState,
