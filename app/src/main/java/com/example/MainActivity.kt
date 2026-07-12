@@ -1030,100 +1030,113 @@ class MainActivity : ComponentActivity() {
             val googleSignInLauncherOnLaunch = androidx.activity.compose.rememberLauncherForActivityResult(
                 contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
             ) { result ->
-                Log.d("MainActivity", "[GOOGLE_SIGN_IN] Launcher result received. Code: ${result.resultCode}")
-                if (result.resultCode == android.app.Activity.RESULT_OK) {
-                    val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
-                    try {
-                        val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
-                        val idToken = account?.idToken
-                        Log.d("MainActivity", "[GOOGLE_SIGN_IN] Account resolved. Email: ${account?.email}, IdToken length: ${idToken?.length ?: 0}")
-                        if (idToken != null) {
-                            val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
-                            val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
-                            Log.d("MainActivity", "[GOOGLE_SIGN_IN] Initiating Firebase authentication with credential.")
-                            auth.signInWithCredential(credential)
-                                .addOnCompleteListener { authTask ->
-                                    if (authTask.isSuccessful) {
-                                        val user = authTask.result?.user
-                                        if (user != null) {
-                                            Log.d("MainActivity", "[GOOGLE_SIGN_IN] Successfully authenticated with Firebase. UID: ${user.uid}")
-                                            
-                                            // Search Firestore using the authenticated Firebase UID
-                                            val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
-                                            db.collection("leaderboard").document(user.uid).get()
-                                                .addOnSuccessListener { documentSnapshot ->
-                                                    isGoogleSignInLoading = false
-                                                    if (documentSnapshot != null && documentSnapshot.exists()) {
-                                                        // 3. Player exists: restore all progress, do NOT show setup screen
-                                                        Log.d("MainActivity", "[GOOGLE_SIGN_IN] User exists in Firestore. Restoring progress.")
-                                                        showGoogleSignInScreen = false
-                                                        showAuthWelcomeScreen = false
-                                                        
-                                                        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
-                                                        prefs.edit().putString("player_uid", user.uid).apply()
-                                                        
-                                                        AuthManager.init(this@MainActivity)
-                                                        AuthManager.restoreProfileFromFirestore(this@MainActivity, user.uid) { success ->
-                                                            loadLocalPrefsState()
-                                                            AuthManager.syncProfileToFirestore(this@MainActivity)
-                                                            refreshOnlineTopScores()
-                                                        }
-                                                    } else {
-                                                        // 4. No player exists: show Initial Pilot Setup
-                                                        Log.d("MainActivity", "[GOOGLE_SIGN_IN] New user. Showing Initial Pilot Setup.")
-                                                        showGoogleSignInScreen = false
-                                                        
-                                                        val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
-                                                        prefs.edit().putString("player_uid", user.uid).apply()
-                                                        
-                                                        showAuthWelcomeScreen = true
-                                                    }
-                                                }
-                                                .addOnFailureListener { e ->
-                                                    Log.e("MainActivity", "[GOOGLE_SIGN_IN] Error querying Firestore", e)
-                                                    isGoogleSignInLoading = false
-                                                    googleSignInErrorMessage = "Firestore query failed: ${e.localizedMessage}"
-                                                }
-                                        } else {
-                                            isGoogleSignInLoading = false
-                                            googleSignInErrorMessage = "Firebase user was null after successful sign-in"
-                                            Log.e("MainActivity", "[GOOGLE_SIGN_IN] Firebase user is null after successful auth.")
-                                        }
-                                    } else {
-                                        val ex = authTask.exception
-                                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] Firebase sign in with credential failed", ex)
-                                        isGoogleSignInLoading = false
-                                        googleSignInErrorMessage = "Firebase Authentication Failed: ${ex?.localizedMessage ?: "Unknown Error"}"
-                                    }
-                                }
-                        } else {
-                            isGoogleSignInLoading = false
-                            googleSignInErrorMessage = "Google Sign-In returned a null ID Token. Please verify Firebase project config."
-                            Log.e("MainActivity", "[GOOGLE_SIGN_IN] Google ID Token is null!")
+                Log.d("MainActivity", "[GOOGLE_SIGN_IN] Launcher result received. ResultCode: ${result.resultCode}, Intent data exists: ${result.data != null}")
+                
+                // Print all extras inside the result data intent for diagnostic transparency
+                result.data?.let { intent ->
+                    intent.extras?.let { bundle ->
+                        for (key in bundle.keySet()) {
+                            Log.d("MainActivity", "[GOOGLE_SIGN_IN] Intent Extra: $key -> ${bundle.get(key)}")
                         }
-                    } catch (e: com.google.android.gms.common.api.ApiException) {
-                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] Google Sign-In ApiException. Status Code: ${e.statusCode}", e)
-                        isGoogleSignInLoading = false
-                        val statusMessage = when (e.statusCode) {
-                            com.google.android.gms.common.api.CommonStatusCodes.DEVELOPER_ERROR -> "Developer Error (10): Please check SHA-1/SHA-256 fingerprint configurations in Firebase Console and ensure Google Sign-In is enabled."
-                            com.google.android.gms.common.api.CommonStatusCodes.SIGN_IN_REQUIRED -> "Sign-In Required: Please sign in again."
-                            com.google.android.gms.common.api.CommonStatusCodes.NETWORK_ERROR -> "Network Error: Please check your internet connection."
-                            com.google.android.gms.common.api.CommonStatusCodes.INTERNAL_ERROR -> "Internal Error: An internal error occurred."
-                            else -> e.localizedMessage ?: "Code: ${e.statusCode}"
-                        }
-                        googleSignInErrorMessage = "Google Sign-In API Exception: $statusMessage"
-                    } catch (e: Exception) {
-                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] General Google Sign-In exception", e)
-                        isGoogleSignInLoading = false
-                        googleSignInErrorMessage = "Google Sign-In Exception: ${e.localizedMessage ?: "Unknown Error"}"
                     }
-                } else {
-                    Log.w("MainActivity", "[GOOGLE_SIGN_IN] Sign-In activity result was not OK. Code: ${result.resultCode}")
+                }
+
+                try {
+                    // Try parsing the Google Sign-In task. We do this inside a general try block
+                    // because getSignedInAccountFromIntent will throw an ApiException containing
+                    // the exact error status code if sign-in failed (e.g. DEVELOPER_ERROR 10),
+                    // which is extremely helpful for debugging.
+                    val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
+                    Log.d("MainActivity", "[GOOGLE_SIGN_IN] Parsing account from intent task...")
+                    val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
+                    val idToken = account?.idToken
+                    Log.d("MainActivity", "[GOOGLE_SIGN_IN] Account resolved successfully. Email: ${account?.email}, IdToken length: ${idToken?.length ?: 0}")
+                    
+                    if (idToken != null) {
+                        val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+                        val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+                        Log.d("MainActivity", "[GOOGLE_SIGN_IN] Initiating Firebase authentication with credential.")
+                        auth.signInWithCredential(credential)
+                            .addOnCompleteListener { authTask ->
+                                if (authTask.isSuccessful) {
+                                    val user = authTask.result?.user
+                                    if (user != null) {
+                                        Log.d("MainActivity", "[GOOGLE_SIGN_IN] Successfully authenticated with Firebase. UID: ${user.uid}")
+                                        
+                                        // Search Firestore using the authenticated Firebase UID
+                                        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+                                        db.collection("leaderboard").document(user.uid).get()
+                                            .addOnSuccessListener { documentSnapshot ->
+                                                isGoogleSignInLoading = false
+                                                if (documentSnapshot != null && documentSnapshot.exists()) {
+                                                    // Player exists: restore progress
+                                                    Log.d("MainActivity", "[GOOGLE_SIGN_IN] User exists in Firestore. Restoring progress.")
+                                                    showGoogleSignInScreen = false
+                                                    showAuthWelcomeScreen = false
+                                                    
+                                                    val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+                                                    prefs.edit().putString("player_uid", user.uid).apply()
+                                                    
+                                                    AuthManager.init(this@MainActivity)
+                                                    AuthManager.restoreProfileFromFirestore(this@MainActivity, user.uid) { success ->
+                                                        loadLocalPrefsState()
+                                                        AuthManager.syncProfileToFirestore(this@MainActivity)
+                                                        refreshOnlineTopScores()
+                                                    }
+                                                } else {
+                                                    // No player exists: show initial pilot setup
+                                                    Log.d("MainActivity", "[GOOGLE_SIGN_IN] New user. Showing Initial Pilot Setup.")
+                                                    showGoogleSignInScreen = false
+                                                    
+                                                    val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+                                                    prefs.edit().putString("player_uid", user.uid).apply()
+                                                    
+                                                    showAuthWelcomeScreen = true
+                                                }
+                                            }
+                                            .addOnFailureListener { e ->
+                                                Log.e("MainActivity", "[GOOGLE_SIGN_IN] Error querying Firestore", e)
+                                                isGoogleSignInLoading = false
+                                                googleSignInErrorMessage = "Firestore query failed: ${e.localizedMessage ?: e.toString()}"
+                                            }
+                                    } else {
+                                        isGoogleSignInLoading = false
+                                        googleSignInErrorMessage = "Firebase user was null after successful sign-in"
+                                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] Firebase user is null after successful auth.")
+                                    }
+                                } else {
+                                    val ex = authTask.exception
+                                    Log.e("MainActivity", "[GOOGLE_SIGN_IN] Firebase sign in with credential failed", ex)
+                                    isGoogleSignInLoading = false
+                                    googleSignInErrorMessage = "Firebase Authentication Failed: ${ex?.localizedMessage ?: ex?.toString() ?: "Unknown Error"}"
+                                }
+                            }
+                    } else {
+                        isGoogleSignInLoading = false
+                        googleSignInErrorMessage = "Google Sign-In returned a null ID Token. Please verify Firebase project config."
+                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] Google ID Token is null!")
+                    }
+                } catch (e: com.google.android.gms.common.api.ApiException) {
+                    Log.e("MainActivity", "[GOOGLE_SIGN_IN] Google Sign-In ApiException. Status Code: ${e.statusCode}", e)
+                    isGoogleSignInLoading = false
+                    val statusMessage = when (e.statusCode) {
+                        com.google.android.gms.common.api.CommonStatusCodes.DEVELOPER_ERROR -> "Developer Error (10): Please check SHA-1/SHA-256 configurations in Firebase Console and ensure Google Sign-In is enabled."
+                        com.google.android.gms.common.api.CommonStatusCodes.SIGN_IN_REQUIRED -> "Sign-In Required: Please sign in again."
+                        com.google.android.gms.common.api.CommonStatusCodes.NETWORK_ERROR -> "Network Error: Please check your internet connection."
+                        com.google.android.gms.common.api.CommonStatusCodes.INTERNAL_ERROR -> "Internal Error: An internal error occurred."
+                        12500 -> "Sign-In Failed (12500): Mismatched configuration, missing SHA fingerprints, or incorrect package name in Google API Console."
+                        12501 -> "Sign-In Cancelled (12501): The sign-in flow was cancelled by the user."
+                        12502 -> "Sign-In in Progress (12502): Another sign-in flow is already in progress."
+                        else -> "Status code: ${e.statusCode}. Message: ${e.localizedMessage ?: "Unknown"}"
+                    }
+                    googleSignInErrorMessage = "Google Sign-In API Exception: $statusMessage"
+                } catch (e: Exception) {
+                    Log.e("MainActivity", "[GOOGLE_SIGN_IN] General Google Sign-In exception", e)
                     isGoogleSignInLoading = false
                     if (result.resultCode == android.app.Activity.RESULT_CANCELED) {
-                        googleSignInErrorMessage = "Google Sign-In was cancelled by the user."
+                        googleSignInErrorMessage = "Google Sign-In was cancelled by the user (Result Code 0)."
                     } else {
-                        googleSignInErrorMessage = "Google Sign-In failed. Activity result code: ${result.resultCode}"
+                        googleSignInErrorMessage = "Google Sign-In Exception: ${e.localizedMessage ?: e.toString() ?: "Unknown Error"}"
                     }
                 }
             }
@@ -1445,10 +1458,19 @@ class MainActivity : ComponentActivity() {
                                     playClickSound()
                                     isGoogleSignInLoading = true
                                     googleSignInErrorMessage = null
+                                    
+                                    val webClientId = try {
+                                        getString(com.example.R.string.default_web_client_id)
+                                    } catch (resourceEx: Exception) {
+                                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] Failed to load default_web_client_id from resources", resourceEx)
+                                        "942525706-5i2ku7qvrqk1a7brq4a9lvf1sik3k1pu.apps.googleusercontent.com"
+                                    }
+                                    Log.d("MainActivity", "[GOOGLE_SIGN_IN] Launching sign-in flow with web client ID: $webClientId")
+                                    
                                     val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
                                         com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
                                     )
-                                        .requestIdToken("942525706-5i2ku7qvrqk1a7brq4a9lvf1sik3k1pu.apps.googleusercontent.com")
+                                        .requestIdToken(webClientId)
                                         .requestEmail()
                                         .build()
                                     val googleSignInClient = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(this@MainActivity, gso)
@@ -5289,10 +5311,15 @@ fun ProfileDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 Button(
                     onClick = {
+                        val webClientId = try {
+                            context.getString(com.example.R.string.default_web_client_id)
+                        } catch (resourceEx: Exception) {
+                            "942525706-5i2ku7qvrqk1a7brq4a9lvf1sik3k1pu.apps.googleusercontent.com"
+                        }
                         val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
                             com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
                         )
-                            .requestIdToken("942525706-5i2ku7qvrqk1a7brq4a9lvf1sik3k1pu.apps.googleusercontent.com")
+                            .requestIdToken(webClientId)
                             .requestEmail()
                             .build()
                         val googleSignInClient = com.google.android.gms.auth.api.signin.GoogleSignIn.getClient(context, gso)
