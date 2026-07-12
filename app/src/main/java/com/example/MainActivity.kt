@@ -864,25 +864,24 @@ class MainActivity : ComponentActivity() {
             }
 
             val user = AuthManager.currentUser
-            if (user != null) {
-                val repository = LeaderboardRepository(this@MainActivity)
-                val result = repository.uploadScoreAndDetails(
-                    uid = resolvedUid,
-                    playerName = user.name,
-                    newKills = kills,
-                    newScore = score,
-                    newLevel = level,
-                    newCoins = coins
-                )
-                if (result.isSuccess) {
-                    Log.d("MainActivity", "[AUDIT_FIREBASE] Score upload SUCCESS to collection 'leaderboard'. UID: $resolvedUid, score: $score, kills: $kills")
-                    updatePlayerGlobalRank(resolvedUid, score)
-                    refreshOnlineTopScores()
-                } else {
-                    Log.e("MainActivity", "[AUDIT_FIREBASE] Score upload FAILURE to collection 'leaderboard'. UID: $resolvedUid, Exception: ", result.exceptionOrNull())
-                }
+            val prefs = getSharedPreferences("cosmic_striker_prefs", android.content.Context.MODE_PRIVATE)
+            val nameToUpload = user?.name ?: prefs.getString("player_name", null) ?: "Pilot Guest"
+
+            val repository = LeaderboardRepository(this@MainActivity)
+            val result = repository.uploadScoreAndDetails(
+                uid = resolvedUid,
+                playerName = nameToUpload,
+                newKills = kills,
+                newScore = score,
+                newLevel = level,
+                newCoins = coins
+            )
+            if (result.isSuccess) {
+                Log.d("MainActivity", "[AUDIT_FIREBASE] Score upload SUCCESS to collection 'leaderboard'. UID: $resolvedUid, score: $score, kills: $kills")
+                updatePlayerGlobalRank(resolvedUid, score)
+                refreshOnlineTopScores()
             } else {
-                Log.w("MainActivity", "[AUDIT_FIREBASE] submitScoreToOnlineLeaderboard() ignored: Player has not registered a profile name yet.")
+                Log.e("MainActivity", "[AUDIT_FIREBASE] Score upload FAILURE to collection 'leaderboard'. UID: $resolvedUid, Exception: ", result.exceptionOrNull())
             }
         }
         AuthManager.syncProfileToFirestore(this)

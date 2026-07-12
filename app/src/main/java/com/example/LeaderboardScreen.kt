@@ -402,89 +402,44 @@ fun LeaderboardScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             // Firebase Diagnostics Panel
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0x15000000)),
-                border = BorderStroke(1.dp, if (diagnosticsSuccess == true) Color.Green else if (diagnosticsSuccess == false) Color.Red else Color(0x33FFFFFF)),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "🧪 CONNECTION VERIFIER",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = if (diagnosticsSuccess == true) Color.Green else if (diagnosticsSuccess == false) Color.Red else Color(0xFF00F0FF),
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                        Button(
-                            onClick = {
-                                showDiagnostics = !showDiagnostics
-                                if (showDiagnostics && diagnosticsLogs.isEmpty()) {
-                                    runFirebaseDiagnostics()
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0x33FFFFFF)),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-                            modifier = Modifier.height(24.dp),
-                            shape = RoundedCornerShape(6.dp)
+            if (com.example.BuildConfig.DEBUG) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color(0x15000000)),
+                    border = BorderStroke(1.dp, if (diagnosticsSuccess == true) Color.Green else if (diagnosticsSuccess == false) Color.Red else Color(0x33FFFFFF)),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = if (showDiagnostics) "HIDE" else "RUN VERIFY",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                    }
-
-                    if (showDiagnostics) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 120.dp)
-                                .background(Color(0xFF010105), shape = RoundedCornerShape(8.dp))
-                                .border(BorderStroke(1.dp, Color(0x11FFFFFF)), shape = RoundedCornerShape(8.dp))
-                                .padding(8.dp)
-                        ) {
-                            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                                items(diagnosticsLogs) { logLine ->
-                                    Text(
-                                        text = logLine,
-                                        color = if (logLine.startsWith("✓")) Color.Green 
-                                               else if (logLine.startsWith("❌") || logLine.startsWith("Exception:") || logLine.startsWith("Message:")) Color.Red 
-                                               else if (logLine.startsWith("⚠")) Color.Yellow 
-                                               else Color(0xFF8FA0DD),
-                                        fontSize = 10.sp,
-                                        fontFamily = FontFamily.Monospace,
-                                        modifier = Modifier.padding(bottom = 2.dp)
-                                    )
-                                }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "🧪 CONNECTION VERIFIER",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (diagnosticsSuccess == true) Color.Green else if (diagnosticsSuccess == false) Color.Red else Color(0xFF00F0FF),
+                                    fontFamily = FontFamily.Monospace
+                                )
                             }
-                        }
-
-                        if (!isDiagnosticsRunning) {
-                            Spacer(modifier = Modifier.height(6.dp))
                             Button(
-                                onClick = { runFirebaseDiagnostics() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0x1A00F0FF)),
-                                border = BorderStroke(1.dp, Color(0xFF00F0FF)),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.align(Alignment.End).height(28.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                                onClick = {
+                                    showDiagnostics = !showDiagnostics
+                                    if (showDiagnostics && diagnosticsLogs.isEmpty()) {
+                                        runFirebaseDiagnostics()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0x33FFFFFF)),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                                modifier = Modifier.height(24.dp),
+                                shape = RoundedCornerShape(6.dp)
                             ) {
                                 Text(
-                                    text = "RE-RUN TEST",
+                                    text = if (showDiagnostics) "HIDE" else "RUN VERIFY",
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White,
@@ -492,11 +447,58 @@ fun LeaderboardScreen(
                                 )
                             }
                         }
+
+                        if (showDiagnostics) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 120.dp)
+                                    .background(Color(0xFF010105), shape = RoundedCornerShape(8.dp))
+                                    .border(BorderStroke(1.dp, Color(0x11FFFFFF)), shape = RoundedCornerShape(8.dp))
+                                    .padding(8.dp)
+                            ) {
+                                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                                    items(diagnosticsLogs) { logLine ->
+                                        Text(
+                                            text = logLine,
+                                            color = if (logLine.startsWith("✓")) Color.Green 
+                                                   else if (logLine.startsWith("❌") || logLine.startsWith("Exception:") || logLine.startsWith("Message:")) Color.Red 
+                                                   else if (logLine.startsWith("⚠")) Color.Yellow 
+                                                   else Color(0xFF8FA0DD),
+                                            fontSize = 10.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            modifier = Modifier.padding(bottom = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (!isDiagnosticsRunning) {
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Button(
+                                    onClick = { runFirebaseDiagnostics() },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0x1A00F0FF)),
+                                    border = BorderStroke(1.dp, Color(0xFF00F0FF)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier.align(Alignment.End).height(28.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "RE-RUN TEST",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             // Action Button
             Button(

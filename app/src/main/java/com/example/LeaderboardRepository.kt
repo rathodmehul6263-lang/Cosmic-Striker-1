@@ -121,8 +121,13 @@ class LeaderboardRepository(private val context: Context) {
         var finalCoins = newCoins
 
         if (snapshot != null && snapshot.exists()) {
-            val existingKills = snapshot.getLong("kills")?.toInt() ?: snapshot.getLong("totalKills")?.toInt() ?: 0
             val existingScore = snapshot.getLong("score")?.toInt() ?: snapshot.getLong("highestScore")?.toInt() ?: 0
+            if (newScore <= existingScore) {
+                Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] Skipping Firestore upload: current new score ($newScore) is not higher than existing record ($existingScore).")
+                return@runCatching
+            }
+            
+            val existingKills = snapshot.getLong("kills")?.toInt() ?: snapshot.getLong("totalKills")?.toInt() ?: 0
             val existingLevel = snapshot.getLong("level")?.toInt() ?: snapshot.getLong("highestLevel")?.toInt() ?: 1
             val existingCoins = snapshot.getLong("coins")?.toInt() ?: 0
 
