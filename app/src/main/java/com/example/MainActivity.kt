@@ -914,6 +914,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         com.google.firebase.FirebaseApp.initializeApp(this)
         Log.d("MainActivity", "[AUDIT_FIREBASE] FirebaseApp.initializeApp(this) executed successfully on startup.")
+        printGoogleSignInDiagnostics(this)
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
@@ -1456,6 +1457,7 @@ class MainActivity : ComponentActivity() {
                                 errorMessage = googleSignInErrorMessage,
                                 onContinueWithGoogle = {
                                     playClickSound()
+                                    printGoogleSignInDiagnostics(this@MainActivity)
                                     isGoogleSignInLoading = true
                                     googleSignInErrorMessage = null
                                     
@@ -4801,6 +4803,33 @@ fun GoogleSignInOverlay(
                         fontFamily = FontFamily.SansSerif,
                         lineHeight = 15.sp
                     )
+                    
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "SYSTEM DIAGNOSTICS:",
+                        color = Color(0xFF00F0FF),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    val sha1 = getSigningCertificateSha1(context)
+                    val defaultWebClientId = try {
+                        context.getString(com.example.R.string.default_web_client_id)
+                    } catch (e: Exception) {
+                        "Not Found"
+                    }
+                    Text(
+                        text = "Package Name: ${context.packageName}\n" +
+                               "Runtime SHA-1: $sha1\n" +
+                               "Web Client ID: $defaultWebClientId\n" +
+                               "OAuth Client ID: 942525706-4pbrbcmvf4nrthja3mil14vqbfu2oomn.apps.googleusercontent.com",
+                        color = Color(0xFFCCCCCC),
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace,
+                        lineHeight = 14.sp
+                    )
                 }
             }
 
@@ -6789,6 +6818,61 @@ fun AnnouncementPopup(
         }
     }
 }
+
+fun getSigningCertificateSha1(context: android.content.Context): String {
+    return try {
+        val packageInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.getPackageInfo(
+                context.packageName,
+                android.content.pm.PackageManager.GET_SIGNATURES
+            )
+        }
+        
+        val signatures = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            packageInfo.signingInfo?.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION")
+            packageInfo.signatures
+        }
+        
+        if (signatures != null && signatures.isNotEmpty()) {
+            val cert = signatures[0].toByteArray()
+            val md = java.security.MessageDigest.getInstance("SHA-1")
+            val publicKey = md.digest(cert)
+            publicKey.joinToString(":") { String.format("%02X", it) }
+        } else {
+            "No signatures found"
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("MainActivity", "Error getting signing certificate SHA-1", e)
+        "Error: ${e.message}"
+    }
+}
+
+fun printGoogleSignInDiagnostics(context: android.content.Context) {
+    val packageName = context.packageName
+    val sha1 = getSigningCertificateSha1(context)
+    val defaultWebClientId = try {
+        context.getString(com.example.R.string.default_web_client_id)
+    } catch (e: Exception) {
+        "Not Found"
+    }
+    val oauthClientId = "942525706-4pbrbcmvf4nrthja3mil14vqbfu2oomn.apps.googleusercontent.com"
+    
+    android.util.Log.d("MainActivity", "=== GOOGLE SIGN-IN DIAGNOSTICS ===")
+    android.util.Log.d("MainActivity", "Package Name: $packageName")
+    android.util.Log.d("MainActivity", "Signing Certificate SHA-1: $sha1")
+    android.util.Log.d("MainActivity", "Default Web Client ID: $defaultWebClientId")
+    android.util.Log.d("MainActivity", "Android OAuth Client ID: $oauthClientId")
+    android.util.Log.d("MainActivity", "==================================")
+}
+
 
 
 
