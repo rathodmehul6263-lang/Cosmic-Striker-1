@@ -30,11 +30,11 @@ plugins {
 }
 
 android {
-  namespace = "com.example"
+  namespace = "com.aarugames.cosmicstriker"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.example.cosmicstriker"
+    applicationId = "com.aarugames.cosmicstriker"
     minSdk = 24
     targetSdk = 36
     versionCode = 1

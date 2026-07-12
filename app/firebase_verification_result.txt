@@ -5,27 +5,46 @@
    Firebase Options Project ID: cosmic-striker-production
 3. Firebase Authentication instance obtained successfully.
    Initiating anonymous sign-in...
+4. Anonymous sign-in succeeded.
+   Authenticated UID: pySrmlVebiYXkVvsBxOTqtYJa5H3
+5. Firebase Firestore instance obtained.
+   Uploading test document to 'leaderboard' with ID: verification_test_1783884658928...
 
 !!! EXCEPTION ENCOUNTERED !!!
-com.google.firebase.FirebaseException: An internal error has occurred.
-	at _COROUTINE._BOUNDARY._(CoroutineDebugging.kt:42)
-	at com.example.FirebaseVerifyTest$verifyFirebaseIntegration$1.invokeSuspend(FirebaseVerifyTest.kt:65)
-Caused by: com.google.firebase.FirebaseException: An internal error has occurred.
-	at com.google.android.gms.internal.firebase-auth-api.zzadz.zza(com.google.firebase:firebase-auth@@24.1.0:18)
-	at com.google.android.gms.internal.firebase-auth-api.zzaex.zza(com.google.firebase:firebase-auth@@24.1.0:21)
-	at com.google.android.gms.internal.firebase-auth-api.zzaeq.zza(com.google.firebase:firebase-auth@@24.1.0:32)
-	at com.google.android.gms.internal.firebase-auth-api.zzaes.zza(com.google.firebase:firebase-auth@@24.1.0:71)
-	at com.google.android.gms.internal.firebase-auth-api.zzadx.zza(com.google.firebase:firebase-auth@@24.1.0:46)
-	at com.google.android.gms.internal.firebase-auth-api.zzabq.zza(com.google.firebase:firebase-auth@@24.1.0:3)
-	at com.google.android.gms.internal.firebase-auth-api.zzafg.zza(com.google.firebase:firebase-auth@@24.1.0:72)
-	at com.google.android.gms.internal.firebase-auth-api.zzaen.zza(com.google.firebase:firebase-auth@@24.1.0:119)
-	at com.google.android.gms.internal.firebase-auth-api.zzaad.zze(com.google.firebase:firebase-auth@@24.1.0:173)
-	at com.google.android.gms.internal.firebase-auth-api.zzadw.zzd(com.google.firebase:firebase-auth@@24.1.0:160)
-	at com.google.android.gms.internal.firebase-auth-api.zzadd.zza(com.google.firebase:firebase-auth@@24.1.0:11)
-	at com.google.android.gms.internal.firebase-auth-api.zzaez.run(com.google.firebase:firebase-auth@@24.1.0:3)
+com.google.firebase.firestore.FirebaseFirestoreException: PERMISSION_DENIED: Missing or insufficient permissions.
+	at com.google.firebase.firestore.util.Util.exceptionFromStatus(Util.java:152)
+	at com.google.firebase.firestore.core.SyncEngine.notifyUser(SyncEngine.java:629)
+	at com.google.firebase.firestore.core.SyncEngine.handleRejectedWrite(SyncEngine.java:511)
+	at com.google.firebase.firestore.core.MemoryComponentProvider$RemoteStoreCallback.handleRejectedWrite(MemoryComponentProvider.java:135)
+	at com.google.firebase.firestore.remote.RemoteStore.handleWriteError(RemoteStore.java:750)
+	at com.google.firebase.firestore.remote.RemoteStore.handleWriteStreamClose(RemoteStore.java:706)
+	at com.google.firebase.firestore.remote.RemoteStore.access$600(RemoteStore.java:62)
+	at com.google.firebase.firestore.remote.RemoteStore$2.onClose(RemoteStore.java:220)
+	at com.google.firebase.firestore.remote.AbstractStream.close(AbstractStream.java:379)
+	at com.google.firebase.firestore.remote.AbstractStream.handleServerClose(AbstractStream.java:433)
+	at com.google.firebase.firestore.remote.AbstractStream$StreamObserver.lambda$onClose$3(AbstractStream.java:160)
+	at com.google.firebase.firestore.remote.AbstractStream$CloseGuardedRunner.run(AbstractStream.java:67)
+	at com.google.firebase.firestore.remote.AbstractStream$StreamObserver.onClose(AbstractStream.java:146)
+	at com.google.firebase.firestore.remote.FirestoreChannel$1.onClose(FirestoreChannel.java:173)
+	at io.grpc.internal.DelayedClientCall$DelayedListener$3.run(DelayedClientCall.java:489)
+	at io.grpc.internal.DelayedClientCall$DelayedListener.delayOrExecute(DelayedClientCall.java:453)
+	at io.grpc.internal.DelayedClientCall$DelayedListener.onClose(DelayedClientCall.java:486)
+	at io.grpc.internal.ClientCallImpl.closeObserver(ClientCallImpl.java:574)
+	at io.grpc.internal.ClientCallImpl.access$300(ClientCallImpl.java:72)
+	at io.grpc.internal.ClientCallImpl$ClientStreamListenerImpl$1StreamClosed.runInternal(ClientCallImpl.java:742)
+	at io.grpc.internal.ClientCallImpl$ClientStreamListenerImpl$1StreamClosed.runInContext(ClientCallImpl.java:723)
+	at io.grpc.internal.ContextRunnable.run(ContextRunnable.java:37)
+	at io.grpc.internal.SerializingExecutor.run(SerializingExecutor.java:133)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:572)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.base/java.util.concurrent.ScheduledThreadPoolExecutor$ScheduledFutureTask.run(ScheduledThreadPoolExecutor.java:304)
 	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
 	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
-	at com.google.firebase.concurrent.CustomThreadFactory.lambda$newThread$0(CustomThreadFactory.java:47)
+	at com.google.firebase.firestore.util.AsyncQueue$SynchronizedShutdownAwareExecutor$DelayedStartFactory.run(AsyncQueue.java:235)
 	at java.base/java.lang.Thread.run(Thread.java:1583)
+Caused by: io.grpc.StatusException: PERMISSION_DENIED: Missing or insufficient permissions.
+	at io.grpc.Status.asException(Status.java:541)
+	at com.google.firebase.firestore.util.Util.exceptionFromStatus(Util.java:150)
+	... 29 more
 
 STATUS: FAILURE

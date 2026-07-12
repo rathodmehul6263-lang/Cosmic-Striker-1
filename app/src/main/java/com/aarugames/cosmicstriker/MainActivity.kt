@@ -1,4 +1,4 @@
-package com.example
+package com.aarugames.cosmicstriker
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -75,7 +75,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
 import coil.compose.AsyncImage
 import androidx.lifecycle.lifecycleScope
-import com.example.ui.theme.MyApplicationTheme
+import com.aarugames.cosmicstriker.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -1462,7 +1462,7 @@ class MainActivity : ComponentActivity() {
                                     googleSignInErrorMessage = null
                                     
                                     val webClientId = try {
-                                        getString(com.example.R.string.default_web_client_id)
+                                        getString(com.aarugames.cosmicstriker.R.string.default_web_client_id)
                                     } catch (resourceEx: Exception) {
                                         Log.e("MainActivity", "[GOOGLE_SIGN_IN] Failed to load default_web_client_id from resources", resourceEx)
                                         "942525706-5i2ku7qvrqk1a7brq4a9lvf1sik3k1pu.apps.googleusercontent.com"
@@ -4431,7 +4431,7 @@ fun SpaceshipGarageCarousel(
                     .clickable {
                         val shareIntent = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, "Play Cosmic Striker - Defend the Galaxy! Download now: https://play.google.com/store/apps/details?id=com.example.cosmicstriker")
+                            putExtra(Intent.EXTRA_TEXT, "Play Cosmic Striker - Defend the Galaxy! Download now: https://play.google.com/store/apps/details?id=com.aarugames.cosmicstriker")
                         }
                         context.startActivity(Intent.createChooser(shareIntent, "Share Cosmic Striker via"))
                     }
@@ -4827,7 +4827,7 @@ fun GoogleSignInOverlay(
                 val sha1 = getSigningCertificateSha1(context)
                 val sha256 = getSigningCertificateSha256(context)
                 val defaultWebClientId = try {
-                    context.getString(com.example.R.string.default_web_client_id)
+                    context.getString(com.aarugames.cosmicstriker.R.string.default_web_client_id)
                 } catch (e: Exception) {
                     "Not Found"
                 }
@@ -5371,7 +5371,7 @@ fun ProfileDialog(
                 Button(
                     onClick = {
                         val webClientId = try {
-                            context.getString(com.example.R.string.default_web_client_id)
+                            context.getString(com.aarugames.cosmicstriker.R.string.default_web_client_id)
                         } catch (resourceEx: Exception) {
                             "942525706-5i2ku7qvrqk1a7brq4a9lvf1sik3k1pu.apps.googleusercontent.com"
                         }
@@ -6926,7 +6926,7 @@ fun printGoogleSignInDiagnostics(context: android.content.Context) {
     val sha1 = getSigningCertificateSha1(context)
     val sha256 = getSigningCertificateSha256(context)
     val defaultWebClientId = try {
-        context.getString(com.example.R.string.default_web_client_id)
+        context.getString(com.aarugames.cosmicstriker.R.string.default_web_client_id)
     } catch (e: Exception) {
         "Not Found"
     }

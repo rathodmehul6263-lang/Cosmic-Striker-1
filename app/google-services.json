@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:942525706:android:b0902a44d68bda35d17ef3",
         "android_client_info": {
-          "package_name": "com.example.cosmicstriker"
+          "package_name": "com.aarugames.cosmicstriker"
         }
       },
       "oauth_client": [
@@ -17,7 +17,7 @@
           "client_id": "942525706-4pbrbcmvf4nrthja3mil14vqbfu2oomn.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.example.cosmicstriker",
+            "package_name": "com.aarugames.cosmicstriker",
             "certificate_hash": "511373ea15c593af23c46bf810252efcd81ffb4b"
           }
         },
