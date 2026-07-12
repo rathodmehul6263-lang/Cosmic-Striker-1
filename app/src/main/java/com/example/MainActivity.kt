@@ -415,6 +415,8 @@ class MainActivity : ComponentActivity() {
     private var showAuthWelcomeScreen by mutableStateOf(false)
     private var showBonusPopup by mutableStateOf(false)
     internal var showProfileDialog by mutableStateOf(false)
+    private var isGoogleSignInLoading by mutableStateOf(false)
+    private var googleSignInErrorMessage by mutableStateOf<String?>(null)
     
     private var soundEffectsEnabledState by mutableStateOf(true)
     private var musicEnabledState by mutableStateOf(true)
@@ -1028,29 +1030,33 @@ class MainActivity : ComponentActivity() {
             val googleSignInLauncherOnLaunch = androidx.activity.compose.rememberLauncherForActivityResult(
                 contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
             ) { result ->
+                Log.d("MainActivity", "[GOOGLE_SIGN_IN] Launcher result received. Code: ${result.resultCode}")
                 if (result.resultCode == android.app.Activity.RESULT_OK) {
                     val task = com.google.android.gms.auth.api.signin.GoogleSignIn.getSignedInAccountFromIntent(result.data)
                     try {
                         val account = task.getResult(com.google.android.gms.common.api.ApiException::class.java)
                         val idToken = account?.idToken
+                        Log.d("MainActivity", "[GOOGLE_SIGN_IN] Account resolved. Email: ${account?.email}, IdToken length: ${idToken?.length ?: 0}")
                         if (idToken != null) {
                             val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
                             val credential = com.google.firebase.auth.GoogleAuthProvider.getCredential(idToken, null)
+                            Log.d("MainActivity", "[GOOGLE_SIGN_IN] Initiating Firebase authentication with credential.")
                             auth.signInWithCredential(credential)
                                 .addOnCompleteListener { authTask ->
                                     if (authTask.isSuccessful) {
                                         val user = authTask.result?.user
                                         if (user != null) {
                                             Log.d("MainActivity", "[GOOGLE_SIGN_IN] Successfully authenticated with Firebase. UID: ${user.uid}")
-                                            showGoogleSignInScreen = false
                                             
                                             // Search Firestore using the authenticated Firebase UID
                                             val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
                                             db.collection("leaderboard").document(user.uid).get()
                                                 .addOnSuccessListener { documentSnapshot ->
+                                                    isGoogleSignInLoading = false
                                                     if (documentSnapshot != null && documentSnapshot.exists()) {
                                                         // 3. Player exists: restore all progress, do NOT show setup screen
                                                         Log.d("MainActivity", "[GOOGLE_SIGN_IN] User exists in Firestore. Restoring progress.")
+                                                        showGoogleSignInScreen = false
                                                         showAuthWelcomeScreen = false
                                                         
                                                         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
@@ -1065,6 +1071,7 @@ class MainActivity : ComponentActivity() {
                                                     } else {
                                                         // 4. No player exists: show Initial Pilot Setup
                                                         Log.d("MainActivity", "[GOOGLE_SIGN_IN] New user. Showing Initial Pilot Setup.")
+                                                        showGoogleSignInScreen = false
                                                         
                                                         val prefs = getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
                                                         prefs.edit().putString("player_uid", user.uid).apply()
@@ -1074,18 +1081,49 @@ class MainActivity : ComponentActivity() {
                                                 }
                                                 .addOnFailureListener { e ->
                                                     Log.e("MainActivity", "[GOOGLE_SIGN_IN] Error querying Firestore", e)
-                                                    showAuthWelcomeScreen = true
+                                                    isGoogleSignInLoading = false
+                                                    googleSignInErrorMessage = "Firestore query failed: ${e.localizedMessage}"
                                                 }
+                                        } else {
+                                            isGoogleSignInLoading = false
+                                            googleSignInErrorMessage = "Firebase user was null after successful sign-in"
+                                            Log.e("MainActivity", "[GOOGLE_SIGN_IN] Firebase user is null after successful auth.")
                                         }
                                     } else {
-                                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] Firebase sign in with credential failed", authTask.exception)
-                                        Toast.makeText(this@MainActivity, "Authentication Failed", Toast.LENGTH_SHORT).show()
+                                        val ex = authTask.exception
+                                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] Firebase sign in with credential failed", ex)
+                                        isGoogleSignInLoading = false
+                                        googleSignInErrorMessage = "Firebase Authentication Failed: ${ex?.localizedMessage ?: "Unknown Error"}"
                                     }
                                 }
+                        } else {
+                            isGoogleSignInLoading = false
+                            googleSignInErrorMessage = "Google Sign-In returned a null ID Token. Please verify Firebase project config."
+                            Log.e("MainActivity", "[GOOGLE_SIGN_IN] Google ID Token is null!")
                         }
+                    } catch (e: com.google.android.gms.common.api.ApiException) {
+                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] Google Sign-In ApiException. Status Code: ${e.statusCode}", e)
+                        isGoogleSignInLoading = false
+                        val statusMessage = when (e.statusCode) {
+                            com.google.android.gms.common.api.CommonStatusCodes.DEVELOPER_ERROR -> "Developer Error (10): Please check SHA-1/SHA-256 fingerprint configurations in Firebase Console and ensure Google Sign-In is enabled."
+                            com.google.android.gms.common.api.CommonStatusCodes.SIGN_IN_REQUIRED -> "Sign-In Required: Please sign in again."
+                            com.google.android.gms.common.api.CommonStatusCodes.NETWORK_ERROR -> "Network Error: Please check your internet connection."
+                            com.google.android.gms.common.api.CommonStatusCodes.INTERNAL_ERROR -> "Internal Error: An internal error occurred."
+                            else -> e.localizedMessage ?: "Code: ${e.statusCode}"
+                        }
+                        googleSignInErrorMessage = "Google Sign-In API Exception: $statusMessage"
                     } catch (e: Exception) {
-                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] Google Sign-In API Exception", e)
-                        Toast.makeText(this@MainActivity, "Google Sign-In failed: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] General Google Sign-In exception", e)
+                        isGoogleSignInLoading = false
+                        googleSignInErrorMessage = "Google Sign-In Exception: ${e.localizedMessage ?: "Unknown Error"}"
+                    }
+                } else {
+                    Log.w("MainActivity", "[GOOGLE_SIGN_IN] Sign-In activity result was not OK. Code: ${result.resultCode}")
+                    isGoogleSignInLoading = false
+                    if (result.resultCode == android.app.Activity.RESULT_CANCELED) {
+                        googleSignInErrorMessage = "Google Sign-In was cancelled by the user."
+                    } else {
+                        googleSignInErrorMessage = "Google Sign-In failed. Activity result code: ${result.resultCode}"
                     }
                 }
             }
@@ -1401,8 +1439,12 @@ class MainActivity : ComponentActivity() {
                         // Google Sign-In Overlay for first launch / unsigned in users
                         if (showGoogleSignInScreen) {
                             GoogleSignInOverlay(
+                                isLoading = isGoogleSignInLoading,
+                                errorMessage = googleSignInErrorMessage,
                                 onContinueWithGoogle = {
                                     playClickSound()
+                                    isGoogleSignInLoading = true
+                                    googleSignInErrorMessage = null
                                     val gso = com.google.android.gms.auth.api.signin.GoogleSignInOptions.Builder(
                                         com.google.android.gms.auth.api.signin.GoogleSignInOptions.DEFAULT_SIGN_IN
                                     )
@@ -1687,11 +1729,14 @@ class MainActivity : ComponentActivity() {
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { ctx ->
-                WebView(ctx).apply {
+                WebView(this@MainActivity).apply {
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
+                    isFocusable = true
+                    isFocusableInTouchMode = true
+                    requestFocus()
                     webViewClient = object : WebViewClient() {
                         override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                             super.onPageStarted(view, url, favicon)
@@ -4657,6 +4702,8 @@ fun StatProgressBar(label: String, value: Float, color: Color) {
 
 @Composable
 fun GoogleSignInOverlay(
+    isLoading: Boolean,
+    errorMessage: String?,
     onContinueWithGoogle: () -> Unit
 ) {
     Box(
@@ -4678,7 +4725,7 @@ fun GoogleSignInOverlay(
                 )
                 .padding(28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(24.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
@@ -4709,29 +4756,76 @@ fun GoogleSignInOverlay(
                 fontFamily = FontFamily.SansSerif
             )
 
-            Button(
-                onClick = onContinueWithGoogle,
-                colors = ButtonDefaults.buttonColors(containerColor = Color.White),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .testTag("google_sign_in_button"),
-                border = BorderStroke(1.dp, Color(0xFFCCCCCC))
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center,
-                    modifier = Modifier.fillMaxWidth()
+            if (errorMessage != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0x1AFF0000), shape = RoundedCornerShape(8.dp))
+                        .border(BorderStroke(1.dp, Color(0xFFFF3B30)), shape = RoundedCornerShape(8.dp))
+                        .padding(12.dp)
                 ) {
-                    Text("G  ", color = Color(0xFF4285F4), fontWeight = FontWeight.Black, fontSize = 18.sp, fontFamily = FontFamily.SansSerif)
                     Text(
-                        text = "Continue with Google",
-                        color = Color.Black,
+                        text = "ERROR:",
+                        color = Color(0xFFFF3B30),
+                        fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        fontFamily = FontFamily.SansSerif
+                        fontFamily = FontFamily.Monospace
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = errorMessage,
+                        color = Color.White,
+                        fontSize = 11.sp,
+                        fontFamily = FontFamily.SansSerif,
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+
+            if (isLoading) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.padding(vertical = 8.dp)
+                ) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        color = Color(0xFF00F0FF),
+                        modifier = Modifier.size(32.dp)
+                    )
+                    Text(
+                        text = "ESTABLISHING COGNITIVE LINK...",
+                        color = Color(0xFF00F0FF),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp
+                    )
+                }
+            } else {
+                Button(
+                    onClick = onContinueWithGoogle,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("google_sign_in_button"),
+                    border = BorderStroke(1.dp, Color(0xFFCCCCCC))
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("G  ", color = Color(0xFF4285F4), fontWeight = FontWeight.Black, fontSize = 18.sp, fontFamily = FontFamily.SansSerif)
+                        Text(
+                            text = "Continue with Google",
+                            color = Color.Black,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp,
+                            fontFamily = FontFamily.SansSerif
+                        )
+                    }
                 }
             }
         }
