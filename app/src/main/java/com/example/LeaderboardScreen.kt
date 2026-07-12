@@ -30,6 +30,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.google.firebase.firestore.FirebaseFirestore
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.tasks.await
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,13 +47,22 @@ fun LeaderboardScreen(
     val scope = rememberCoroutineScope()
     val repository = remember { LeaderboardRepository(context) }
 
-    // Fetch from Firestore and sort locally in memory to support tie-breakers perfectly without custom indexes
+    var refreshTrigger by remember { mutableStateOf(0) }
+    var showDiagnostics by remember { mutableStateOf(false) }
+    var isDiagnosticsRunning by remember { mutableStateOf(false) }
+    var diagnosticsLogs by remember { mutableStateOf<List<String>>(emptyList()) }
+    var diagnosticsSuccess by remember { mutableStateOf<Boolean?>(null) }
+
     fun fetchLeaderboard() {
+        refreshTrigger++
+    }
+
+    // Subscribe to real-time updates and handle updates reactively
+    LaunchedEffect(refreshTrigger) {
         isLoading = true
         errorMessage = null
-        scope.launch {
-            try {
-                val result = repository.getTop100Leaderboard()
+        repository.getTop100LeaderboardRealtime()
+            .collect { result ->
                 if (result.isSuccess) {
                     val list = result.getOrThrow()
                     leaderboardEntries = list
@@ -80,17 +91,86 @@ fun LeaderboardScreen(
                     errorMessage = result.exceptionOrNull()?.message ?: "Failed to connect to the cosmic network."
                     isLoading = false
                 }
-            } catch (e: Exception) {
-                Log.e("LeaderboardScreen", "Firestore exception in fetchLeaderboard", e)
-                errorMessage = e.message ?: "An unexpected cosmic anomaly occurred."
-                isLoading = false
             }
-        }
     }
 
-    // Refresh automatically when opened
-    LaunchedEffect(Unit) {
-        fetchLeaderboard()
+    // Self-contained, robust interactive diagnostic verification tool
+    fun runFirebaseDiagnostics() {
+        if (isDiagnosticsRunning) return
+        isDiagnosticsRunning = true
+        diagnosticsLogs = listOf("⚡ INITIATING QUANTUM SECURE LINK DIAGNOSTICS...")
+        diagnosticsSuccess = null
+
+        scope.launch {
+            try {
+                // 1. Google Play Services / Firebase Options check
+                val firebaseApp = com.google.firebase.FirebaseApp.getInstance()
+                val projectId = firebaseApp.options.projectId ?: "Unknown"
+                diagnosticsLogs = diagnosticsLogs + "✓ Firebase Initialized. Project ID: $projectId"
+
+                // 2. Auth State and Anonymous Sign-In check
+                diagnosticsLogs = diagnosticsLogs + "⏳ Resolving Neural ID Link (FirebaseAuth)..."
+                val auth = com.google.firebase.auth.FirebaseAuth.getInstance()
+                var user = auth.currentUser
+                if (user == null) {
+                    diagnosticsLogs = diagnosticsLogs + "⚠ No active neural identity token. Authenticating anonymously..."
+                    auth.signInAnonymously().await()
+                    user = auth.currentUser
+                }
+
+                if (user == null) {
+                    throw IllegalStateException("FirebaseAuth.currentUser is still null after anonymous authentication!")
+                }
+                val resolvedUid = user.uid
+                diagnosticsLogs = diagnosticsLogs + "✓ Identity Secured. Secure UID: $resolvedUid"
+
+                // 3. Write and immediately read back verification document (Using authenticated UID as document ID)
+                diagnosticsLogs = diagnosticsLogs + "⏳ Transmitting verification document to cloud sector 'leaderboard/$resolvedUid'..."
+                
+                val scoreManager = LeaderboardManager(context)
+                val highscore = scoreManager.getHighScore()
+                val killsStat = context.getSharedPreferences("cosmic_striker_prefs", android.content.Context.MODE_PRIVATE)
+                    .getInt("total_kills_stat", 0)
+                val coinsStat = context.getSharedPreferences("cosmic_striker_prefs", android.content.Context.MODE_PRIVATE)
+                    .getInt("total_coins_stat", 0)
+
+                // Perform the write and immediate read-back
+                val verifyResult = repository.verifyFirestoreWriteAndRead(
+                    uid = resolvedUid,
+                    playerName = AuthManager.currentUser?.name ?: "Pilot Verification-Test",
+                    kills = killsStat,
+                    level = 1,
+                    score = highscore,
+                    coins = coinsStat
+                )
+
+                if (verifyResult.isSuccess) {
+                    val readData = verifyResult.getOrThrow()
+                    diagnosticsLogs = diagnosticsLogs + "✓ Document written to 'leaderboard/$resolvedUid' successfully."
+                    diagnosticsLogs = diagnosticsLogs + "⏳ Initiating instant verification read-back from cloud..."
+                    diagnosticsLogs = diagnosticsLogs + "✓ Verification read-back complete! Verified data fields:"
+                    diagnosticsLogs = diagnosticsLogs + "   - playerName: ${readData["playerName"]}"
+                    diagnosticsLogs = diagnosticsLogs + "   - score: ${readData["score"]}"
+                    diagnosticsLogs = diagnosticsLogs + "   - kills: ${readData["kills"]}"
+                    diagnosticsLogs = diagnosticsLogs + "   - level: ${readData["level"]}"
+                    diagnosticsLogs = diagnosticsLogs + "   - coins: ${readData["coins"]}"
+                    diagnosticsLogs = diagnosticsLogs + "   - timestamp: ${readData["timestamp"]}"
+                    diagnosticsLogs = diagnosticsLogs + "\n🎉 FIRESTORE CONNECTION SUCCESSFUL! Leaderboard collection automatically verified."
+                    diagnosticsSuccess = true
+                } else {
+                    val ex = verifyResult.exceptionOrNull() ?: Exception("Unknown read/write exception")
+                    throw ex
+                }
+            } catch (e: Exception) {
+                Log.e("LeaderboardScreen", "Diagnostics failure: ", e)
+                diagnosticsLogs = diagnosticsLogs + "❌ DIAGNOSTICS FAILURE!"
+                diagnosticsLogs = diagnosticsLogs + "Exception: ${e.javaClass.simpleName}"
+                diagnosticsLogs = diagnosticsLogs + "Message: ${e.message}"
+                diagnosticsSuccess = false
+            } finally {
+                isDiagnosticsRunning = false
+            }
+        }
     }
 
     Box(
@@ -319,7 +399,104 @@ fun LeaderboardScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Firebase Diagnostics Panel
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0x15000000)),
+                border = BorderStroke(1.dp, if (diagnosticsSuccess == true) Color.Green else if (diagnosticsSuccess == false) Color.Red else Color(0x33FFFFFF)),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "🧪 CONNECTION VERIFIER",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (diagnosticsSuccess == true) Color.Green else if (diagnosticsSuccess == false) Color.Red else Color(0xFF00F0FF),
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                showDiagnostics = !showDiagnostics
+                                if (showDiagnostics && diagnosticsLogs.isEmpty()) {
+                                    runFirebaseDiagnostics()
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0x33FFFFFF)),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+                            modifier = Modifier.height(24.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = if (showDiagnostics) "HIDE" else "RUN VERIFY",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+
+                    if (showDiagnostics) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 120.dp)
+                                .background(Color(0xFF010105), shape = RoundedCornerShape(8.dp))
+                                .border(BorderStroke(1.dp, Color(0x11FFFFFF)), shape = RoundedCornerShape(8.dp))
+                                .padding(8.dp)
+                        ) {
+                            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                                items(diagnosticsLogs) { logLine ->
+                                    Text(
+                                        text = logLine,
+                                        color = if (logLine.startsWith("✓")) Color.Green 
+                                               else if (logLine.startsWith("❌") || logLine.startsWith("Exception:") || logLine.startsWith("Message:")) Color.Red 
+                                               else if (logLine.startsWith("⚠")) Color.Yellow 
+                                               else Color(0xFF8FA0DD),
+                                        fontSize = 10.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        modifier = Modifier.padding(bottom = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (!isDiagnosticsRunning) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Button(
+                                onClick = { runFirebaseDiagnostics() },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0x1A00F0FF)),
+                                border = BorderStroke(1.dp, Color(0xFF00F0FF)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.align(Alignment.End).height(28.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "RE-RUN TEST",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             // Action Button
             Button(

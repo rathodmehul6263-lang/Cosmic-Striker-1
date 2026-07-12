@@ -9,6 +9,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import java.util.Date
 
@@ -154,6 +157,64 @@ class LeaderboardRepository(private val context: Context) {
     }
 
     /**
+     * Read the Top 100 leaderboard in real time.
+     */
+    fun getTop100LeaderboardRealtime(): Flow<Result<List<LeaderboardUser>>> = callbackFlow {
+        Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] getTop100LeaderboardRealtime() subscribing to collection 'leaderboard'")
+        val subscription = db.collection("leaderboard")
+            .addSnapshotListener { querySnapshot, error ->
+                if (error != null) {
+                    Log.e("LeaderboardRepository", "[AUDIT_FIREBASE] Real-time listener failed", error)
+                    trySend(Result.failure(error))
+                    return@addSnapshotListener
+                }
+
+                if (querySnapshot != null) {
+                    val list = mutableListOf<LeaderboardUser>()
+                    querySnapshot.documents.forEach { doc ->
+                        val uid = doc.getString("uid") ?: doc.id
+                        val name = doc.getString("playerName") ?: doc.getString("displayName") ?: "Unknown Pilot"
+                        val kills = doc.getLong("kills")?.toInt() ?: doc.getLong("totalKills")?.toInt() ?: 0
+                        val score = doc.getLong("score")?.toInt() ?: doc.getLong("highestScore")?.toInt() ?: 0
+                        val level = doc.getLong("level")?.toInt() ?: doc.getLong("highestLevel")?.toInt() ?: 1
+                        val coins = doc.getLong("coins")?.toInt() ?: 0
+                        val profilePic = doc.getString("profilePictureBase64")
+                        val updatedAtDate = doc.getTimestamp("updatedAt")?.toDate()
+
+                        list.add(
+                            LeaderboardUser(
+                                rank = 0,
+                                uid = uid,
+                                playerName = name,
+                                kills = kills,
+                                score = score,
+                                level = level,
+                                coins = coins,
+                                profilePictureBase64 = profilePic,
+                                updatedAt = updatedAtDate
+                            )
+                        )
+                    }
+
+                    // Sort descending by score, then by kills, then by level
+                    val sorted = list.sortedWith(
+                        compareByDescending<LeaderboardUser> { it.score }
+                            .thenByDescending { it.kills }
+                            .thenByDescending { it.level }
+                    ).mapIndexed { index, user ->
+                        user.copy(rank = index + 1)
+                    }.take(100)
+
+                    trySend(Result.success(sorted))
+                }
+            }
+        awaitClose {
+            Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] Closing real-time leaderboard subscription")
+            subscription.remove()
+        }
+    }
+
+    /**
      * Fetch Top 100 players from the collection efficiently.
      * This query executes with O(k) complexity where k is the limit of 100 documents, scaling to millions.
      */
@@ -232,5 +293,67 @@ class LeaderboardRepository(private val context: Context) {
 
         // Rank = number of players with strictly higher score + 1
         (higherCount + 1).toInt()
+    }
+
+    /**
+     * Verify connection by writing a real document and reading it back.
+     * Uses the Firebase Authentication UID as the document ID in 'leaderboard' collection.
+     */
+    suspend fun verifyFirestoreWriteAndRead(
+        uid: String,
+        playerName: String,
+        kills: Int,
+        level: Int,
+        score: Int,
+        coins: Int
+    ): Result<Map<String, Any>> = runCatching {
+        Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] verifyFirestoreWriteAndRead started for UID: $uid")
+        
+        val docRef = db.collection("leaderboard").document(uid)
+        val timestamp = System.currentTimeMillis()
+        val testData = hashMapOf<String, Any?>(
+            "uid" to uid,
+            "playerName" to playerName,
+            "displayName" to playerName,
+            "kills" to kills,
+            "level" to level,
+            "score" to score,
+            "coins" to coins,
+            "timestamp" to timestamp,
+            "updatedAt" to FieldValue.serverTimestamp(),
+            "isVerificationTest" to true
+        )
+
+        // 1. Write the document
+        Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] Writing verification doc to 'leaderboard/$uid'...")
+        docRef.set(testData, SetOptions.merge()).await()
+        Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] Write complete. Reading back to verify...")
+
+        // 2. Read the document back
+        val snapshot = docRef.get().await()
+        if (!snapshot.exists()) {
+            throw IllegalStateException("Verification read-back failed: Document does not exist in Firestore after write!")
+        }
+
+        // 3. Parse and verify
+        val readUid = snapshot.getString("uid")
+        val readName = snapshot.getString("playerName")
+        val readKills = snapshot.getLong("kills")?.toInt() ?: 0
+        val readLevel = snapshot.getLong("level")?.toInt() ?: 0
+        val readScore = snapshot.getLong("score")?.toInt() ?: 0
+        val readCoins = snapshot.getLong("coins")?.toInt() ?: 0
+        val readTimestamp = snapshot.getLong("timestamp") ?: 0L
+
+        Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] Verification read-back successful! Read name: $readName, score: $readScore")
+
+        mapOf(
+            "uid" to (readUid ?: ""),
+            "playerName" to (readName ?: ""),
+            "kills" to readKills,
+            "level" to readLevel,
+            "score" to readScore,
+            "coins" to readCoins,
+            "timestamp" to readTimestamp
+        )
     }
 }

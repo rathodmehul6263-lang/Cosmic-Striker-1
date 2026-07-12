@@ -1,0 +1,31 @@
+=== FIREBASE VERIFICATION START ===
+1. google-services.json is present at: /app/applet/app/google-services.json
+   Project ID from google-services.json matches: cosmic-striker-production
+2. Firebase.initializeApp() ran successfully.
+   Firebase Options Project ID: cosmic-striker-production
+3. Firebase Authentication instance obtained successfully.
+   Initiating anonymous sign-in...
+
+!!! EXCEPTION ENCOUNTERED !!!
+com.google.firebase.FirebaseException: An internal error has occurred.
+	at _COROUTINE._BOUNDARY._(CoroutineDebugging.kt:42)
+	at com.example.FirebaseVerifyTest$verifyFirebaseIntegration$1.invokeSuspend(FirebaseVerifyTest.kt:65)
+Caused by: com.google.firebase.FirebaseException: An internal error has occurred.
+	at com.google.android.gms.internal.firebase-auth-api.zzadz.zza(com.google.firebase:firebase-auth@@24.1.0:18)
+	at com.google.android.gms.internal.firebase-auth-api.zzaex.zza(com.google.firebase:firebase-auth@@24.1.0:21)
+	at com.google.android.gms.internal.firebase-auth-api.zzaeq.zza(com.google.firebase:firebase-auth@@24.1.0:32)
+	at com.google.android.gms.internal.firebase-auth-api.zzaes.zza(com.google.firebase:firebase-auth@@24.1.0:71)
+	at com.google.android.gms.internal.firebase-auth-api.zzadx.zza(com.google.firebase:firebase-auth@@24.1.0:46)
+	at com.google.android.gms.internal.firebase-auth-api.zzabq.zza(com.google.firebase:firebase-auth@@24.1.0:3)
+	at com.google.android.gms.internal.firebase-auth-api.zzafg.zza(com.google.firebase:firebase-auth@@24.1.0:72)
+	at com.google.android.gms.internal.firebase-auth-api.zzaen.zza(com.google.firebase:firebase-auth@@24.1.0:119)
+	at com.google.android.gms.internal.firebase-auth-api.zzaad.zze(com.google.firebase:firebase-auth@@24.1.0:173)
+	at com.google.android.gms.internal.firebase-auth-api.zzadw.zzd(com.google.firebase:firebase-auth@@24.1.0:160)
+	at com.google.android.gms.internal.firebase-auth-api.zzadd.zza(com.google.firebase:firebase-auth@@24.1.0:11)
+	at com.google.android.gms.internal.firebase-auth-api.zzaez.run(com.google.firebase:firebase-auth@@24.1.0:3)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at com.google.firebase.concurrent.CustomThreadFactory.lambda$newThread$0(CustomThreadFactory.java:47)
+	at java.base/java.lang.Thread.run(Thread.java:1583)
+
+STATUS: FAILURE
