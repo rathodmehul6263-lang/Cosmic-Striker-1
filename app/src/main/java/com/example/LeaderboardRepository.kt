@@ -66,7 +66,8 @@ data class LeaderboardUser(
     val level: Int = 1,
     val coins: Int = 0,
     val profilePictureBase64: String? = null,
-    val updatedAt: Date? = null
+    val updatedAt: Date? = null,
+    val playerId: String = ""
 )
 
 class LeaderboardRepository(private val context: Context) {
@@ -103,8 +104,39 @@ class LeaderboardRepository(private val context: Context) {
             Log.e("LeaderboardRepository", "[AUDIT_FIREBASE] uploadScoreAndDetails() ERROR: No authenticated Firebase user found! Cannot upload.", ex)
             throw ex
         }
+        val prefs = context.getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        var playerId = prefs.getString("player_id", "") ?: ""
+        if (playerId.isEmpty()) {
+            var attempts = 0
+            while (attempts < 10) {
+                val candidate = (10000000..99999999).random().toString()
+                val isUnique = try {
+                    val snapshot = db.collection("leaderboard")
+                        .whereEqualTo("playerId", candidate)
+                        .limit(1)
+                        .get()
+                        .await()
+                    snapshot.isEmpty
+                } catch (e: Exception) {
+                    true
+                }
+                if (isUnique) {
+                    playerId = candidate
+                    prefs.edit().putString("player_id", playerId).apply()
+                    AuthManager.init(context)
+                    break
+                }
+                attempts++
+            }
+            if (playerId.isEmpty()) {
+                playerId = (10000000..99999999).random().toString()
+                prefs.edit().putString("player_id", playerId).apply()
+                AuthManager.init(context)
+            }
+        }
+
         val resolvedUid = currentUser.uid
-        Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] uploadScoreAndDetails() writing to 'leaderboard' for UID: $resolvedUid, Name: $playerName, score: $newScore, kills: $newKills")
+        Log.d("LeaderboardRepository", "[AUDIT_FIREBASE] uploadScoreAndDetails() writing to 'leaderboard' for UID: $resolvedUid, Name: $playerName, score: $newScore, kills: $newKills, playerId: $playerId")
         val docRef = db.collection("leaderboard").document(resolvedUid)
 
         // Try to read document first (with default Firestore fallback behavior: checks local cache if offline)
@@ -139,6 +171,7 @@ class LeaderboardRepository(private val context: Context) {
 
         val data = hashMapOf<String, Any?>(
             "uid" to resolvedUid,
+            "playerId" to playerId,
             "playerName" to playerName,
             "displayName" to playerName, // Backward compatibility with existing UI
             "kills" to finalKills,
@@ -185,6 +218,10 @@ class LeaderboardRepository(private val context: Context) {
                         val coins = doc.getLong("coins")?.toInt() ?: 0
                         val profilePic = doc.getString("profilePictureBase64")
                         val updatedAtDate = doc.getTimestamp("updatedAt")?.toDate()
+                        val parsedPlayerId = doc.getString("playerId") ?: run {
+                            val hash = Math.abs(uid.hashCode() % 90000000) + 10000000
+                            hash.toString()
+                        }
 
                         list.add(
                             LeaderboardUser(
@@ -196,7 +233,8 @@ class LeaderboardRepository(private val context: Context) {
                                 level = level,
                                 coins = coins,
                                 profilePictureBase64 = profilePic,
-                                updatedAt = updatedAtDate
+                                updatedAt = updatedAtDate,
+                                playerId = parsedPlayerId
                             )
                         )
                     }
@@ -253,6 +291,10 @@ class LeaderboardRepository(private val context: Context) {
             val coins = doc.getLong("coins")?.toInt() ?: 0
             val profilePic = doc.getString("profilePictureBase64")
             val updatedAtDate = doc.getTimestamp("updatedAt")?.toDate()
+            val parsedPlayerId = doc.getString("playerId") ?: run {
+                val hash = Math.abs(uid.hashCode() % 90000000) + 10000000
+                hash.toString()
+            }
 
             list.add(
                 LeaderboardUser(
@@ -264,7 +306,8 @@ class LeaderboardRepository(private val context: Context) {
                     level = level,
                     coins = coins,
                     profilePictureBase64 = profilePic,
-                    updatedAt = updatedAtDate
+                    updatedAt = updatedAtDate,
+                    playerId = parsedPlayerId
                 )
             )
         }

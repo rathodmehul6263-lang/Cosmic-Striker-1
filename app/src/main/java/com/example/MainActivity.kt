@@ -4925,9 +4925,9 @@ fun ProfileDialog(
                                 .clickable {
                                     try {
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                        val clip = android.content.ClipData.newPlainText("Player UID", activeUser.id)
+                                        val clip = android.content.ClipData.newPlainText("Player ID", activeUser.playerId)
                                         clipboard.setPrimaryClip(clip)
-                                        Toast.makeText(context, "UID copied to clipboard!", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Player ID copied to clipboard!", Toast.LENGTH_SHORT).show()
                                     } catch (e: Exception) {
                                         Log.e("Profile", "Clipboard error", e)
                                     }
@@ -4937,7 +4937,7 @@ fun ProfileDialog(
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "UID: ${activeUser.id}",
+                                text = "PLAYER ID: ${activeUser.playerId}",
                                 color = Color(0xFF00F0FF),
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,

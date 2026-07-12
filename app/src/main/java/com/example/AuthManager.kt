@@ -11,7 +11,8 @@ data class UserProfile(
     val name: String,
     val photoUrl: String,
     val email: String = "",
-    val provider: String = "Custom"
+    val provider: String = "Custom",
+    val playerId: String = ""
 )
 
 object AuthManager {
@@ -27,16 +28,57 @@ object AuthManager {
             val photoUrl = prefs.getString("player_profile_pic_path", "") ?: ""
             val firebaseUser = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser
             val provider = if (firebaseUser?.isAnonymous == true) "Anonymous" else if (firebaseUser != null) "Google" else "LocalCustom"
+            val playerId = prefs.getString("player_id", "") ?: ""
             currentUser = UserProfile(
                 id = uid,
                 name = name,
                 photoUrl = photoUrl,
                 email = firebaseUser?.email ?: "",
-                provider = provider
+                provider = provider,
+                playerId = playerId
             )
         } else {
             currentUser = null
         }
+    }
+
+    // Generate and guarantee a unique 8-digit Player ID
+    fun ensureUniquePlayerId(context: Context, onComplete: (String) -> Unit) {
+        val prefs = context.getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
+        val existingId = prefs.getString("player_id", "") ?: ""
+        if (existingId.isNotEmpty() && existingId.length == 8 && existingId.all { it.isDigit() }) {
+            onComplete(existingId)
+            return
+        }
+
+        val db = com.google.firebase.firestore.FirebaseFirestore.getInstance()
+        
+        fun tryCandidate() {
+            val candidate = (10000000..99999999).random().toString()
+            db.collection("leaderboard")
+                .whereEqualTo("playerId", candidate)
+                .limit(1)
+                .get()
+                .addOnSuccessListener { querySnapshot ->
+                    if (querySnapshot != null && querySnapshot.isEmpty) {
+                        prefs.edit().putString("player_id", candidate).apply()
+                        init(context)
+                        Log.d("AuthManager", "[PLAYER_ID] Generated unique Player ID: $candidate")
+                        onComplete(candidate)
+                    } else {
+                        Log.w("AuthManager", "[PLAYER_ID] Collision for candidate: $candidate. Retrying...")
+                        tryCandidate()
+                    }
+                }
+                .addOnFailureListener { e ->
+                    Log.e("AuthManager", "[PLAYER_ID] Error checking uniqueness", e)
+                    prefs.edit().putString("player_id", candidate).apply()
+                    init(context)
+                    onComplete(candidate)
+                }
+        }
+        
+        tryCandidate()
     }
 
     // Process gallery picture selection, crop it to square, and save it locally
@@ -91,6 +133,15 @@ object AuthManager {
     fun syncProfileToFirestore(context: Context) {
         val prefs = context.getSharedPreferences("cosmic_striker_prefs", Context.MODE_PRIVATE)
         val uid = prefs.getString("player_uid", null) ?: return
+        
+        val playerId = prefs.getString("player_id", "") ?: ""
+        if (playerId.isEmpty()) {
+            ensureUniquePlayerId(context) { guaranteedId ->
+                syncProfileToFirestore(context)
+            }
+            return
+        }
+
         val name = prefs.getString("player_name", "Pilot") ?: "Pilot"
         val base64Pic = prefs.getString("player_profile_pic_base64", null)
         
@@ -133,6 +184,7 @@ object AuthManager {
             
             val data = hashMapOf<String, Any?>(
                 "uid" to uid,
+                "playerId" to playerId,
                 "playerName" to name,
                 "displayName" to name,
                 "score" to highestScore.toLong(),
@@ -186,6 +238,11 @@ object AuthManager {
                         val remoteCoins = doc.getLong("coins")?.toInt() ?: 0
                         val remoteGames = doc.getLong("gamesPlayed")?.toInt() ?: 0
                         val remoteName = doc.getString("displayName") ?: "Pilot"
+                        val remotePlayerId = doc.getString("playerId") ?: ""
+
+                        if (remotePlayerId.isNotEmpty()) {
+                            editor.putString("player_id", remotePlayerId)
+                        }
 
                         val localCoins = prefs.getInt("total_coins", 0)
                         if (remoteCoins > localCoins) {

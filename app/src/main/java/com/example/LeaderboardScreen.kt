@@ -639,7 +639,7 @@ fun OnlineLeaderboardRow(entry: LeaderboardUser, currentUserId: String?) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "UID: ${entry.uid}",
+                    text = "Player ID: ${entry.playerId}",
                     color = Color.Gray,
                     fontSize = 11.sp,
                     fontFamily = FontFamily.Monospace
