@@ -45,12 +45,6 @@ android {
   }
 
   signingConfigs {
-    getByName("debug") {
-      storeFile = file("${rootDir}/debug.keystore")
-      storePassword = "android"
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
-    }
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
       storeFile = file(keystorePath)
@@ -69,7 +63,6 @@ android {
       manifestPlaceholders["admobAppId"] = getSecretProperty("ADMOB_APP_ID", "ca-app-pub-3940256099942544~3347511713")
     }
     debug {
-      signingConfig = signingConfigs.getByName("debug")
       manifestPlaceholders["admobAppId"] = "ca-app-pub-3940256099942544~3347511713"
     }
   }
