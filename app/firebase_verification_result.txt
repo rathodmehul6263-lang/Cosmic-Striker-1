@@ -6,9 +6,9 @@
 3. Firebase Authentication instance obtained successfully.
    Initiating anonymous sign-in...
 4. Anonymous sign-in succeeded.
-   Authenticated UID: pySrmlVebiYXkVvsBxOTqtYJa5H3
+   Authenticated UID: fSQfrtIn3zXYPrGwyYbJFMAEo0Q2
 5. Firebase Firestore instance obtained.
-   Uploading test document to 'leaderboard' with ID: verification_test_1783884658928...
+   Uploading test document to 'leaderboard' with ID: verification_test_1783961858118...
 
 !!! EXCEPTION ENCOUNTERED !!!
 com.google.firebase.firestore.FirebaseFirestoreException: PERMISSION_DENIED: Missing or insufficient permissions.

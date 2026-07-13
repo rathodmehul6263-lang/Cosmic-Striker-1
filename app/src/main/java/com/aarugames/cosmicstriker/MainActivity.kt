@@ -4837,10 +4837,10 @@ fun GoogleSignInOverlay(
                     "2. RUNTIME SHA-1" to sha1,
                     "3. RUNTIME SHA-256" to sha256,
                     "4. DEFAULT_WEB_CLIENT_ID" to defaultWebClientId,
-                    "5. ANDROID OAUTH CLIENT" to "942525706-4pbrbcmvf4nrthja3mil14vqbfu2oomn.apps.googleusercontent.com",
+                    "5. ANDROID OAUTH CLIENT" to "942525706-ap5uh6gso73uke41bcupvrfbhmt0qrd3.apps.googleusercontent.com",
                     "6. WEB OAUTH CLIENT" to "942525706-5i2ku7qvrqk1a7brq4a9lvf1sik3k1pu.apps.googleusercontent.com",
                     "7. FIREBASE PROJECT ID" to "cosmic-striker-production",
-                    "8. FIREBASE APP ID" to "1:942525706:android:b0902a44d68bda35d17ef3"
+                    "8. FIREBASE APP ID" to "1:942525706:android:f66c8db1ca7e90d1d17ef3"
                 )
 
                 items.forEach { (label, value) ->
@@ -6930,10 +6930,10 @@ fun printGoogleSignInDiagnostics(context: android.content.Context) {
     } catch (e: Exception) {
         "Not Found"
     }
-    val androidOAuthClientId = "942525706-4pbrbcmvf4nrthja3mil14vqbfu2oomn.apps.googleusercontent.com"
+    val androidOAuthClientId = "942525706-ap5uh6gso73uke41bcupvrfbhmt0qrd3.apps.googleusercontent.com"
     val webOAuthClientId = "942525706-5i2ku7qvrqk1a7brq4a9lvf1sik3k1pu.apps.googleusercontent.com"
     val firebaseProjectId = "cosmic-striker-production"
-    val firebaseAppId = "1:942525706:android:b0902a44d68bda35d17ef3"
+    val firebaseAppId = "1:942525706:android:f66c8db1ca7e90d1d17ef3"
     
     android.util.Log.d("MainActivity", "=== GOOGLE SIGN-IN DIAGNOSTICS ===")
     android.util.Log.d("MainActivity", "1. Package Name: $packageName")
