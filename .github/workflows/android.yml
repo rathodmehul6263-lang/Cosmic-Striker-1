@@ -28,14 +28,14 @@ jobs:
         uses: android-actions/setup-android@v3
 
       - name: Build Release APK
-  env:
-    KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
-    STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-    KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-    KEY_ALIAS: upload
-  run: |
-    chmod +x gradlew
-    ./gradlew assembleRelease
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEY_ALIAS: upload
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease
 
       - name: Upload Release APK
         uses: actions/upload-artifact@v4
