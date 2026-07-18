@@ -14,11 +14,11 @@
       },
       "oauth_client": [
         {
-          "client_id": "942525706-tnv3jobvkae7lffij1t8t2n68cfonijl.apps.googleusercontent.com",
+          "client_id": "942525706-67da53a4a4vumqv1cdmhlprt94cdcke5.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.aarugames.cosmicstriker",
-            "certificate_hash": "d05326df10d05ff08d7387c4459c1174e91b09de"
+            "certificate_hash": "799477b48ca3758584457bd158f6b956d3f598dc"
           }
         },
         {

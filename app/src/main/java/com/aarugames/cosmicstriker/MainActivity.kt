@@ -1118,25 +1118,30 @@ class MainActivity : ComponentActivity() {
                         Log.e("MainActivity", "[GOOGLE_SIGN_IN] Google ID Token is null!")
                     }
                 } catch (e: com.google.android.gms.common.api.ApiException) {
-                    Log.e("MainActivity", "[GOOGLE_SIGN_IN] Google Sign-In ApiException. Status Code: ${e.statusCode}", e)
                     isGoogleSignInLoading = false
-                    val statusMessage = when (e.statusCode) {
-                        com.google.android.gms.common.api.CommonStatusCodes.DEVELOPER_ERROR -> "Developer Error (10): Please check SHA-1/SHA-256 configurations in Firebase Console and ensure Google Sign-In is enabled."
-                        com.google.android.gms.common.api.CommonStatusCodes.SIGN_IN_REQUIRED -> "Sign-In Required: Please sign in again."
-                        com.google.android.gms.common.api.CommonStatusCodes.NETWORK_ERROR -> "Network Error: Please check your internet connection."
-                        com.google.android.gms.common.api.CommonStatusCodes.INTERNAL_ERROR -> "Internal Error: An internal error occurred."
-                        12500 -> "Sign-In Failed (12500): Mismatched configuration, missing SHA fingerprints, or incorrect package name in Google API Console."
-                        12501 -> "Sign-In Cancelled (12501): The sign-in flow was cancelled by the user."
-                        12502 -> "Sign-In in Progress (12502): Another sign-in flow is already in progress."
-                        else -> "Status code: ${e.statusCode}. Message: ${e.localizedMessage ?: "Unknown"}"
+                    if (e.statusCode == 12501) {
+                        Log.d("MainActivity", "[GOOGLE_SIGN_IN] Google Sign-In was cancelled by the user.")
+                        googleSignInErrorMessage = null
+                    } else {
+                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] Google Sign-In ApiException. Status Code: ${e.statusCode}", e)
+                        val statusMessage = when (e.statusCode) {
+                            com.google.android.gms.common.api.CommonStatusCodes.DEVELOPER_ERROR -> "Developer Error (10): Please check SHA-1/SHA-256 configurations in Firebase Console and ensure Google Sign-In is enabled."
+                            com.google.android.gms.common.api.CommonStatusCodes.SIGN_IN_REQUIRED -> "Sign-In Required: Please sign in again."
+                            com.google.android.gms.common.api.CommonStatusCodes.NETWORK_ERROR -> "Network Error: Please check your internet connection."
+                            com.google.android.gms.common.api.CommonStatusCodes.INTERNAL_ERROR -> "Internal Error: An internal error occurred."
+                            12500 -> "Sign-In Failed (12500): Mismatched configuration, missing SHA fingerprints, or incorrect package name in Google API Console."
+                            12502 -> "Sign-In in Progress (12502): Another sign-in flow is already in progress."
+                            else -> "Status code: ${e.statusCode}. Message: ${e.localizedMessage ?: "Unknown"}"
+                        }
+                        googleSignInErrorMessage = "Google Sign-In API Exception: $statusMessage"
                     }
-                    googleSignInErrorMessage = "Google Sign-In API Exception: $statusMessage"
                 } catch (e: Exception) {
-                    Log.e("MainActivity", "[GOOGLE_SIGN_IN] General Google Sign-In exception", e)
                     isGoogleSignInLoading = false
                     if (result.resultCode == android.app.Activity.RESULT_CANCELED) {
-                        googleSignInErrorMessage = "Google Sign-In was cancelled by the user (Result Code 0)."
+                        Log.d("MainActivity", "[GOOGLE_SIGN_IN] Google Sign-In activity was cancelled by the user.")
+                        googleSignInErrorMessage = null
                     } else {
+                        Log.e("MainActivity", "[GOOGLE_SIGN_IN] General Google Sign-In exception", e)
                         googleSignInErrorMessage = "Google Sign-In Exception: ${e.localizedMessage ?: e.toString() ?: "Unknown Error"}"
                     }
                 }
