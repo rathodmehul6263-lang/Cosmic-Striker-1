@@ -4767,7 +4767,7 @@ fun GoogleSignInOverlay(
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "SECURE COGNITIVE LINK",
+                    text = "Secure Cognitive Link",
                     fontSize = 11.sp,
                     color = Color(0xFF00F0FF),
                     fontWeight = FontWeight.Bold,
@@ -4777,7 +4777,7 @@ fun GoogleSignInOverlay(
             }
 
             Text(
-                text = "Authenticate your pilot neural signature using your Google Account to access the online leaderboards, secure your progress across all devices, and receive a 200 Coin registration bonus.",
+                text = "Sign in with Google to save your progress, compete on the global leaderboard, and receive a 200 Coin welcome bonus.",
                 fontSize = 12.sp,
                 color = Color.LightGray,
                 textAlign = TextAlign.Center,
@@ -4808,63 +4808,6 @@ fun GoogleSignInOverlay(
                         fontFamily = FontFamily.SansSerif,
                         lineHeight = 15.sp
                     )
-                }
-            }
-
-            // Diagnostics Panel (Always Visible)
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color(0x0F00F0FF), shape = RoundedCornerShape(12.dp))
-                    .border(BorderStroke(1.dp, Color(0xFF00F0FF).copy(alpha = 0.3f)), shape = RoundedCornerShape(12.dp))
-                    .padding(14.dp)
-            ) {
-                Text(
-                    text = "NEURAL LINK SYSTEM DIAGNOSTICS",
-                    color = Color(0xFF00F0FF),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 1.sp
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                val context = androidx.compose.ui.platform.LocalContext.current
-                val sha1 = getSigningCertificateSha1(context)
-                val sha256 = getSigningCertificateSha256(context)
-                val defaultWebClientId = try {
-                    context.getString(com.aarugames.cosmicstriker.R.string.default_web_client_id)
-                } catch (e: Exception) {
-                    "Not Found"
-                }
-
-                val items = listOf(
-                    "1. PACKAGE NAME" to context.packageName,
-                    "2. RUNTIME SHA-1" to sha1,
-                    "3. RUNTIME SHA-256" to sha256,
-                    "4. DEFAULT_WEB_CLIENT_ID" to defaultWebClientId,
-                    "5. ANDROID OAUTH CLIENT" to "942525706-ap5uh6gso73uke41bcupvrfbhmt0qrd3.apps.googleusercontent.com",
-                    "6. WEB OAUTH CLIENT" to "942525706-5i2ku7qvrqk1a7brq4a9lvf1sik3k1pu.apps.googleusercontent.com",
-                    "7. FIREBASE PROJECT ID" to "cosmic-striker-production",
-                    "8. FIREBASE APP ID" to "1:942525706:android:f66c8db1ca7e90d1d17ef3"
-                )
-
-                items.forEach { (label, value) ->
-                    Column(modifier = Modifier.padding(vertical = 3.dp)) {
-                        Text(
-                            text = label,
-                            color = Color(0xFFFF0080),
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        Text(
-                            text = value,
-                            color = Color.White.copy(alpha = 0.9f),
-                            fontSize = 9.5.sp,
-                            fontFamily = FontFamily.Monospace,
-                            lineHeight = 11.sp
-                        )
-                    }
                 }
             }
 
